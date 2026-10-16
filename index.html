@@ -200,7 +200,7 @@ body.tutorial-active{--tutorial-coach-space:245px}
 .tutorial-coach[data-collapsed="true"]{width:auto;min-width:210px;padding:9px 12px;overflow:visible}
 .tutorial-coach[data-collapsed="true"] h2,.tutorial-coach[data-collapsed="true"] .tutorial-instruction,.tutorial-coach[data-collapsed="true"] .tutorial-state,.tutorial-coach[data-collapsed="true"] .tutorial-actions{display:none}
 /* An outline does not move the highlighted control or change its hit area. */
-.tutorial-active .tutorial-target{outline:3px solid #d8fa78!important;outline-offset:4px!important;box-shadow:0 0 0 7px #b9e56520,0 0 23px #b9e56525;scroll-margin-block:135px 280px;animation:tutorial-target-pulse 2s ease-in-out infinite}
+.tutorial-active .tutorial-target{outline:3px solid #d8fa78!important;outline-offset:4px!important;box-shadow:0 0 0 7px #b9e56520,0 0 23px #b9e56525;scroll-margin-block:80px 280px;animation:tutorial-target-pulse 2s ease-in-out infinite}
 .tutorial-active .tutorial-target:focus-visible{outline-color:#efffc1!important}
 @keyframes tutorial-target-pulse{0%,100%{outline-color:#d8fa78;box-shadow:0 0 0 7px #b9e56520,0 0 23px #b9e56525}50%{outline-color:#f0ffb1;box-shadow:0 0 0 8px #b9e56535,0 0 29px #b9e56540}}
 @media(max-width:700px){
@@ -241,6 +241,8 @@ body.tutorial-active{--tutorial-coach-space:245px}
 .tutorial-actions button{white-space:normal;max-width:100%}
 .tutorial-coach[data-collapsed="true"] .tutorial-chapter,.tutorial-coach[data-collapsed="true"] .tutorial-concept,.tutorial-coach[data-collapsed="true"] .tutorial-do-label,.tutorial-coach[data-collapsed="true"] .tutorial-more,.tutorial-coach[data-collapsed="true"] .tutorial-outcome{display:none}
 @media(max-width:700px){.tutorial-coach .tutorial-concept{font-size:11px}.tutorial-actions{bottom:-14px}.tutorial-more{font-size:10px}}
+
+@media(min-width:701px) and (max-height:650px){.tutorial-coach{max-height:50dvh}}
 
 /* GM settings button */
 .manager-avatar{padding:0;font-family:inherit;line-height:1;cursor:pointer}
@@ -30315,7 +30317,7 @@ window.LCK_ACADEMY_DATA = {
     $('#tutorial-collapse').textContent=session.collapsed?'펼치기':'접기';$('#tutorial-next').disabled=!ready;$('#tutorial-next').textContent=step.id==='finish'?(session.mode==='start'?'정식 커리어 시작':'기존 구단으로 돌아가기'):ready?(step.manual?'이해했어요 · 다음':'결과 확인 · 다음'):'실제 조작 후 다음';
     $('#tutorial-skip').textContent=session.mode==='start'?'건너뛰고 새로 시작':'연습 종료';
     const nodes=document.querySelectorAll?Array.from(document.querySelectorAll(target)):[$(target)];const node=nodes.find(n=>typeof n.getClientRects!=='function'||n.getClientRects().length)||nodes[0];
-    if(node){node.classList.add('tutorial-target');node.setAttribute('data-tutorial-highlight',step.id);session.highlighted=[node];if(move&&node.scrollIntoView)node.scrollIntoView({block:'center',inline:'center',behavior:'auto'});if(move&&!node.disabled&&node.matches?.('button,a,input,select'))node.focus({preventScroll:true});if(node.getBoundingClientRect&&coach.getBoundingClientRect){const a=node.getBoundingClientRect(),b=coach.getBoundingClientRect(),height=window.innerHeight;if(Number.isFinite(height)&&!(window.innerWidth<=700&&tutorialHasModal())){const bottom=height-22,top=bottom-b.height;coach.classList.toggle('tutorial-coach-top-position',a.bottom>top&&a.top<bottom&&a.right>b.left&&a.left<b.right);}document.body.style?.setProperty('--tutorial-coach-space',Math.max(66,Math.ceil(b.height)+24)+'px');}}
+    if(node){node.classList.add('tutorial-target');node.setAttribute('data-tutorial-highlight',step.id);session.highlighted=[node];if(move&&node.scrollIntoView)node.scrollIntoView({block:'start',inline:'center',behavior:'auto'});if(move&&!node.disabled&&node.matches?.('button,a,input,select'))node.focus({preventScroll:true});if(node.getBoundingClientRect&&coach.getBoundingClientRect){const a=node.getBoundingClientRect(),b=coach.getBoundingClientRect(),height=window.innerHeight;if(Number.isFinite(height)&&!(window.innerWidth<=700&&tutorialHasModal())){const bottom=height-22,top=bottom-b.height;coach.classList.toggle('tutorial-coach-top-position',a.bottom>top&&a.top<bottom&&a.right>b.left&&a.left<b.right);}document.body.style?.setProperty('--tutorial-coach-space',Math.max(66,Math.ceil(b.height)+24)+'px');}}
   }
   function tutorialObserve(){const session=tutorialSession;if(!session||session.updating||state!==session.practiceState)return;session.updating=true;try{const id=tutorialCurrent().id,html=$('#modal-root').innerHTML;if(id==='release'&&html.includes('release-summary')||id==='events'&&html.includes('구단 소식')||id==='save'&&html.includes('id="export-save"'))session.evidence[id]=true;if(tutorialGoal())session.completed[id]=true;updateTutorial();}finally{session.updating=false;}}
   function tutorialRecord(kind,result){if(tutorialSession&&state===tutorialSession.practiceState&&result?.ok){tutorialSession.evidence[kind]=true;tutorialSession.results[kind]=result.message;tutorialObserve();}}
