@@ -227,6 +227,21 @@ body.tutorial-active{--tutorial-coach-space:245px}
 
 @media(max-width:900px){body.tutorial-active #navigation{min-width:0;justify-content:flex-start;scroll-padding-inline:10px}}
 
+/* System lessons stay inside the guide and leave the actual game unchanged. */
+.tutorial-coach{overflow-wrap:anywhere}
+.tutorial-chapter{display:block;margin-top:10px;font-size:10px;color:#a8c36e}
+.tutorial-coach .tutorial-concept{font-size:12px;line-height:1.75;color:#e0e9d8;margin:0 0 11px}
+.tutorial-do-label{font-size:10px;font-weight:700;color:#d2ee96;margin-bottom:4px}
+.tutorial-more{margin-top:10px;border-top:1px solid #37442f;padding-top:8px;font-size:11px;line-height:1.75;color:#aebfa5}
+.tutorial-more summary{cursor:pointer;color:#c4db9c}
+.tutorial-more p{margin:7px 0 0}
+.tutorial-coach .tutorial-outcome{margin-top:10px;padding:9px 10px;background:#293b23;border-left:3px solid #b4df70;font-size:11px;line-height:1.8;color:#e3f4cb}
+.tutorial-outcome:empty{display:none}
+.tutorial-actions{position:sticky;bottom:-17px;margin-inline:-3px;padding:10px 3px 0;background:#182019}
+.tutorial-actions button{white-space:normal;max-width:100%}
+.tutorial-coach[data-collapsed="true"] .tutorial-chapter,.tutorial-coach[data-collapsed="true"] .tutorial-concept,.tutorial-coach[data-collapsed="true"] .tutorial-do-label,.tutorial-coach[data-collapsed="true"] .tutorial-more,.tutorial-coach[data-collapsed="true"] .tutorial-outcome{display:none}
+@media(max-width:700px){.tutorial-coach .tutorial-concept{font-size:11px}.tutorial-actions{bottom:-14px}.tutorial-more{font-size:10px}}
+
 /* GM settings button */
 .manager-avatar{padding:0;font-family:inherit;line-height:1;cursor:pointer}
 .manager-avatar:hover{background:#303c24;border-color:#91a964}
@@ -26976,7 +26991,7 @@ window.LCK_ACADEMY_DATA = {
   const ROLES = ['TOP', 'JGL', 'MID', 'ADC', 'SUP'];
   const MAX_SQUAD_SIZE = 20;
   const MAX_FACILITY_LEVEL = 10;
-  const BALANCE = Object.freeze({weeklyTrainingLimit:5,facilityTrainingPercent:10,facilityIncome:28,facilityFans:500,upgradeBase:180,upgradeStep:90,baseOperations:55,facilityMaintenance:5,weeklyInterest:0.004,maxPreparationBonus:4.5,conditioningRecovery:6,conditioningInjuryWeeks:1,vacationRecovery:30,vacationLoyalty:4,teamworkSkillGrowth:0.1,newPlayerChemistryPenalty:20,dailyChemistryDecay:1});
+  const BALANCE = Object.freeze({weeklyTrainingLimit:5,facilityTrainingPercent:10,facilityIncome:24,facilityFans:750,upgradeBase:160,upgradeStep:100,baseOperations:65,facilityMaintenance:4,weeklyInterest:0.004,maxPreparationBonus:4.5,conditioningRecovery:8,conditioningInjuryWeeks:1,vacationRecovery:32,vacationLoyalty:0.7,teamworkSkillGrowth:0.06,newPlayerChemistryPenalty:20,dailyChemistryDecay:1,gateBase:65,gateFanFactor:12,gateConfidenceFactor:0.35});
   function trainingUsed(state){return state.preparation.trainingCount ?? (state.preparation.trained?1:0);}
   function trainingRemaining(state){return Math.max(0,BALANCE.weeklyTrainingLimit-trainingUsed(state));}
   function conditioningInjuryReduction(level){return BALANCE.conditioningInjuryWeeks+(level>=5?1:0)+(level>=10?1:0);}
@@ -26988,17 +27003,17 @@ window.LCK_ACADEMY_DATA = {
     { id: 'lifestyle', name: 'MOMENT', weekly: 215, winBonus: 0, trainingBonus: 0, lossFans: 1, description: '주당 215M · 패배 시 팬 신뢰 −1' }
   ];
   const FOCUS = {
-    mechanics: { name: '개인 기량 훈련', bonus: 0, growth: 0.5 },
-    teamwork: { name: '팀워크 훈련', bonus: 0, growth: 1.3 },
+    mechanics: { name: '개인 기량 훈련', bonus: 0, growth: 0.6 },
+    teamwork: { name: '팀워크 훈련', bonus: 0, growth: 1.8 },
     conditioning: { name: '컨디션 관리', bonus: 0.8, growth: 0.06 },
     scouting: { name: '상대 분석', bonus: 2.2, growth: 0.04 },
     vacation: { name: '휴가', bonus: 0, growth: 0 },
     rest: { name: '휴가', bonus: 0, growth: 0 }
   };
   const INTENSITIES = {
-    light: { name: '가볍게', multiplier: 0.7, fatigue: 4, cost: 12 },
-    normal: { name: '보통', multiplier: 1, fatigue: 8, cost: 24 },
-    hard: { name: '강도 높게', multiplier: 1.4, fatigue: 14, cost: 42 }
+    light: { name: '가볍게', multiplier: 0.7, fatigue: 3, cost: 10 },
+    normal: { name: '보통', multiplier: 1, fatigue: 7, cost: 22 },
+    hard: { name: '강도 높게', multiplier: 1.4, fatigue: 11, cost: 36 }
   };
   const FACILITIES = {
     training: { name: '개인 훈련실', description: '개인 기량 훈련 경험치 획득량 향상', focus: 'mechanics' },
@@ -28369,7 +28384,7 @@ window.LCK_ACADEMY_DATA = {
     const salary = rounded(sum(squad(state, state.teamId).map(p => p.salary)) / 52);
     const operations = rounded(BALANCE.baseOperations + sum(Object.values(state.facilities)) * BALANCE.facilityMaintenance);
     const sponsor = state.sponsor ? SPONSORS.find(s => s.id === state.sponsor.id) : null;
-    const gate = rounded(65 + Math.sqrt(state.fans / 10000) * 6 + state.fanConfidence * 0.35 + state.facilities.marketing * BALANCE.facilityIncome);
+    const gate = rounded(BALANCE.gateBase + Math.sqrt(state.fans / 10000) * BALANCE.gateFanFactor + state.fanConfidence * BALANCE.gateConfidenceFactor + state.facilities.marketing * BALANCE.facilityIncome);
     const interest = rounded(state.debt * BALANCE.weeklyInterest);
     const eventSponsor=rounded(sum(state.randomEvents.sponsorships.filter(d=>d.remainingWeeks>0).map(d=>d.weeklyIncome)));
     return { salary, operations, interest, fanGrowth:state.facilities.community*BALANCE.facilityFans,eventSponsor, sponsor: sponsor ? sponsor.weekly : 0, gate, expenses: rounded(salary + operations + interest), income: rounded(gate + (sponsor ? sponsor.weekly : 0) + eventSponsor), net: rounded(gate + (sponsor ? sponsor.weekly : 0) + eventSponsor - salary - operations - interest) };
@@ -29965,33 +29980,284 @@ window.LCK_ACADEMY_DATA = {
   let matchRequestVersion=0;
   let tutorialSession=null;
   const tutorialSteps=[
-    {id:'dashboard',title:'실제 대시보드를 둘러보세요',text:'운영 자금·팬 규모·팀 합과 다음 일정을 확인하세요. 지금부터 이 화면의 실제 버튼을 사용합니다.',manual:true},
-    {id:'roster',title:'2군 선수를 직접 콜업하세요',text:'선수단 관리 → 2군 탭에서 강조된 선수의 ‘콜업 · 교체’를 누르세요. 1군 선발과 2군 명단이 실제로 바뀝니다.',view:'roster'},
-    {id:'mechanics',title:'개인 기량 훈련을 실행하세요',text:'훈련 센터에서 개인 기량 훈련을 선택하고 선수를 확인한 뒤 실행하세요. 비용·주간 횟수·선수 경험치가 실제로 바뀝니다.',view:'training'},
-    {id:'teamwork',title:'팀워크 훈련으로 호흡을 맞추세요',text:'팀워크 훈련을 선택해 실행하세요. 팀 합은 즉시 상승하고, 그 주의 자연 감소가 멈춥니다. 선수 기량은 경험치를 얻습니다.',view:'training'},
-    {id:'facility',title:'실제 시설을 한 단계 확장하세요',text:'구단 인프라에서 개인 훈련실을 확장하세요. 화면의 운영 자금과 시설 레벨, 훈련 보너스를 확인하세요.',view:'training'},
-    {id:'finance',title:'구단 재정에서 손익을 확인하세요',text:'구단 재정으로 이동해 주간 급여·수입·시설 운영 비용을 살펴보세요. 팬 규모는 관중·굿즈 수입과 영입 설득 조건에 영향을 줍니다.',view:'finance',manual:true},
-    {id:'transfer',title:'실제 협상창에서 선수를 영입하세요',text:'2군 선수 검색 → 협상 → 즉시 1군 콜업 약속 → 연봉 제안 → 계약 체결 순서로 진행하세요. 조건을 충족해야 계약 버튼이 활성화됩니다.',view:'transfer'},
-    {id:'bracket',title:'시즌 일정에서 대진표를 여세요',text:'리그 & 일정에서 LCK 컵을 눌러 실제 대진표와 바론·장로 그룹을 확인하세요.',view:'league'},
-    {id:'draft',title:'실제 LCK 컵 드래프트를 진행하세요',text:'그룹 드래프트를 열고 시작하세요. 내 차례에는 선·후픽 또는 구단을 직접 선택하고, AI 차례는 자동으로 진행됩니다.'},
-    {id:'tactic',title:'경기 전략을 선택하세요',text:'드래프트 창을 닫고 대시보드에서 초반 압박을 선택하세요. 전략 선택도 실제 경기 계산에 반영됩니다.',view:'dashboard'},
-    {id:'next-own',title:'우리 팀 경기 직전까지 진행하세요',text:'‘다음 우리 팀 경기까지 진행’을 사용하세요. 다른 구단의 경기와 이벤트를 확인하며 우리 팀 경기 바로 직전에 멈춥니다.',view:'dashboard'},
-    {id:'match',title:'실제 경기를 관전하고 결과를 확인하세요',text:'대기 창을 닫고 경기 시작을 누르세요. 미니맵·킬·골드와 해설을 확인하고, 끝까지 보거나 ‘결과 보기’로 마무리하세요.',view:'dashboard'},
-    {id:'finish',title:'실제 구단 운영을 체험했습니다',text:'콜업·개인 훈련·팀워크·시설 확장·영입·드래프트·경기까지 완료했습니다. 연습 결과를 되돌리고 정식 커리어로 이동합니다.',manual:true}
-  ];
+  {
+    "id": "dashboard",
+    "chapter": "구단 운영",
+    "title": "어떤 구단을 만들지 결정해요",
+    "text": "운영 자금·순위·팀 전력·팬 규모를 확인하세요.",
+    "concept": "운영 자금은 영입·훈련·시설에 쓰는 돈입니다. 팀 전력은 선수들의 평균 기량이며, 승패는 컨디션·팀 합·전략도 함께 반영합니다.",
+    "more": "매치 수와 훈련 주차는 다릅니다. 같은 날짜에 경기를 여러 번 진행해도 훈련은 게임 달력 7일이 지나야 충전됩니다.",
+    "manual": true
+  },
+  {
+    "id": "attributes",
+    "chapter": "선수 관리",
+    "title": "선수 능력치 읽는 법을 배워요",
+    "text": "선수단 관리로 이동해 선수들의 능력치를 비교하세요.",
+    "concept": "라인전은 초반 라인 싸움, 교전력은 한타에 영향을 줍니다. 충성심이 높으면 영입 협상에서 더 높은 연봉과 어려운 설득 조건을 요구합니다.",
+    "more": "잠재력은 개인 훈련 경험치 획득량, 친화력은 팀워크의 팀 합 상승량에 영향을 주며 두 수치는 성장하지 않습니다. 컨디션이 낮거나 부상 중이면 실제 경기 기량이 내려갑니다. 초기 2군 기량은 최고 60이지만 훈련 후에는 60을 넘을 수 있습니다.",
+    "view": "roster",
+    "manual": true
+  },
+  {
+    "id": "roster",
+    "chapter": "선수 관리",
+    "title": "2군 선수를 직접 선발로 바꿔요",
+    "text": "2군 탭에서 강조된 선수의 ‘콜업 · 교체’를 누르세요.",
+    "concept": "같은 포지션의 1군·2군 선수가 자리를 맞바꿉니다. 내부 콜업에는 이적료와 외부 영입의 팀 합 감소가 없습니다.",
+    "more": "선발은 TOP·JGL·MID·ADC·SUP 각 1명입니다. 선수단 정원 20명에는 1군과 2군이 모두 포함됩니다.",
+    "view": "roster"
+  },
+  {
+    "id": "release",
+    "chapter": "선수 관리",
+    "title": "방출하기 전 위약금을 확인해요",
+    "text": "선수의 방출 버튼을 눌러 비용을 확인하고 취소하세요.",
+    "concept": "방출은 공짜가 아닙니다. 남은 계약이 길수록 큰 위약금이 생기며 실제 방출 시 운영 자금에서 즉시 차감합니다.",
+    "more": "위약금은 연봉 × 남은 계약 주 ÷ 52 × 150%입니다. 선발을 방출하려면 같은 포지션을 채울 수 있어야 합니다. 연습에서는 비용만 확인하고 방출을 취소합니다.",
+    "view": "roster"
+  },
+  {
+    "id": "mechanics",
+    "chapter": "훈련과 성장",
+    "title": "한 선수의 라인전을 훈련해요",
+    "text": "훈련 센터에서 개인 기량 훈련을 선택한 뒤 실행하세요.",
+    "concept": "선수 한 명과 라인전·교전력 중 하나를 고릅니다. 훈련을 하면 해당 능력치의 경험치가 쌓이고, 비용·컨디션·주간 훈련 횟수를 사용합니다.",
+    "more": "잠재력·훈련 강도·개인 훈련실이 경험치에 영향을 줍니다. 강한 훈련은 한 번의 효율이 높지만 더 비싸고 컨디션도 더 많이 소모합니다.",
+    "view": "training"
+  },
+  {
+    "id": "growth",
+    "chapter": "훈련과 성장",
+    "title": "경험치를 채워야 능력치가 올라요",
+    "text": "방금 훈련한 선수의 능력치 아래 경험치 막대를 확인하세요.",
+    "concept": "막대를 채우면 능력치가 +1 오르고 남은 경험치는 다음 성장으로 이어집니다. 낮은 기량일수록 요구 경험치가 적습니다.",
+    "more": "기량 40은 144 XP, 60은 244 XP, 80은 376 XP가 필요합니다. 훈련 직후 숫자가 그대로여도 경험치가 늘었다면 정상입니다. 팀 합은 이 방식 대신 훈련 즉시 오릅니다.",
+    "view": "training",
+    "manual": true
+  },
+  {
+    "id": "teamwork",
+    "chapter": "훈련과 성장",
+    "title": "팀 합을 올리고 실수를 줄여요",
+    "text": "팀워크 훈련을 선택해 실행하세요.",
+    "concept": "팀 합이 낮으면 경기 중 연계 실수가 늘어납니다. 팀워크는 팀 합을 즉시 높이고 1·2군 선수들에게 기량 경험치를 조금 줍니다.",
+    "more": "팀워크를 하지 않은 주에는 매일 팀 합이 1씩 내려갑니다. 한 번 실시하면 그 주의 남은 감소를 막습니다. 외부 선수를 영입하면 기본 팀 합이 20 감소합니다.",
+    "view": "training"
+  },
+  {
+    "id": "conditioning",
+    "chapter": "훈련과 성장",
+    "title": "전원 컨디션과 부상을 관리해요",
+    "text": "컨디션 관리를 선택해 실행하세요.",
+    "concept": "1·2군 전원의 컨디션을 조금 회복하고, 부상 선수의 남은 회복 기간을 줄입니다. 선수의 기본 기량 자체를 깎거나 다시 올리는 방식은 아닙니다.",
+    "more": "컨디션 센터 Lv.0~4는 부상 기간 −1주, Lv.5~9는 −2주, Lv.10은 −3주입니다. 부상자가 없어도 전원 컨디션 회복은 적용됩니다.",
+    "view": "training"
+  },
+  {
+    "id": "vacation",
+    "chapter": "훈련과 성장",
+    "title": "한 선수에게 휴가를 주세요",
+    "text": "휴가를 고른 뒤 대상 선수를 확인하고 실행하세요.",
+    "concept": "휴가는 한 명의 컨디션을 크게 회복하고 충성심 경험치를 줍니다. 비용은 무료지만 주간 훈련 1회를 사용합니다.",
+    "more": "컨디션 관리는 전원 회복·재활, 휴가는 한 명 집중 회복·충성심 성장입니다. 휴가로 부상 기간이 줄지는 않습니다.",
+    "view": "training"
+  },
+  {
+    "id": "scouting",
+    "chapter": "훈련과 성장",
+    "title": "다음 경기의 준비 효과를 얻어요",
+    "text": "상대 분석을 선택해 실행하세요.",
+    "concept": "상대 분석은 다음 경기의 준비 효과를 높입니다. 선수 능력치가 영구적으로 오르는 훈련과 용도가 다릅니다.",
+    "more": "같은 주의 준비 효과는 계속 더하는 대신 가장 높은 값을 적용하며 최대 4.5입니다. 분석 후 다른 훈련을 해도 확보한 준비 효과는 유지됩니다. 이번 주에는 다섯 종류를 한 번씩 경험했습니다.",
+    "view": "training"
+  },
+  {
+    "id": "planner",
+    "chapter": "훈련과 성장",
+    "title": "다음 주 훈련을 예약해요",
+    "text": "여러 주 훈련 예약을 열고 다음 주부터 실행할 계획을 저장하세요.",
+    "concept": "예약은 자동 경기 중에도 훈련을 챙기는 방법입니다. 주당 최대 5회이며 예약했다고 훈련 횟수나 돈을 더 주지는 않습니다.",
+    "more": "1~52주를 예약할 수 있고 실행할 때 비용을 냅니다. 돈·선수·횟수 조건이 맞지 않으면 실패 사유가 기록됩니다. 충전 팝업에서 자동 경기를 끊고 훈련 센터로 갈 수도 있습니다.",
+    "view": "training"
+  },
+  {
+    "id": "facility",
+    "chapter": "시설과 재정",
+    "title": "개인 훈련실을 확장해요",
+    "text": "개인 훈련실의 확장 버튼을 누르세요.",
+    "concept": "모든 시설은 Lv.0에서 시작하고 최대 Lv.10입니다. 확장하면 연결된 훈련 효과가 커지지만 투자금과 매주 유지비가 듭니다.",
+    "more": "다음 확장 비용은 현재 레벨에 따라 증가합니다. 높은 레벨을 한 번에 목표로 삼기보다 현재 필요한 훈련과 주간 손익을 같이 보고 투자하세요.",
+    "view": "training"
+  },
+  {
+    "id": "infrastructure",
+    "chapter": "시설과 재정",
+    "title": "일곱 시설의 역할을 구분해요",
+    "text": "구단 인프라의 일곱 시설과 보너스를 살펴보세요.",
+    "concept": "개인 훈련실·팀워크 스튜디오·컨디션 센터·전력 분석실·휴식 라운지는 각각 다섯 훈련을 강화합니다.",
+    "more": "사업 운영 센터는 주간 수입, 팬 커뮤니티 센터는 주간 팬 유입을 늘립니다. 팬은 관중·굿즈 수입과 영입 설득 조건에 쓰입니다. 시설은 협상 조건을 여는 역할도 합니다.",
+    "view": "training",
+    "manual": true
+  },
+  {
+    "id": "finance",
+    "chapter": "시설과 재정",
+    "title": "보유 자금과 주간 손익을 구분해요",
+    "text": "구단 재정에서 수입·급여·시설 비용·주간 예상 손익을 확인하세요.",
+    "concept": "운영 자금은 지금 쓸 수 있는 돈이고, 주간 손익은 매주 늘거나 줄 돈입니다. 영입 후에는 이적료뿐 아니라 앞으로의 급여도 부담합니다.",
+    "more": "파트너 지원·팬 수입·추가 스폰서는 수입입니다. 1·2군 급여·시설 유지비·대출 이자는 비용입니다. 적자가 나면 자동 긴급 대출이 생기므로 자금만 보지 말고 손익도 확인하세요.",
+    "view": "finance",
+    "manual": true
+  },
+  {
+    "id": "partner",
+    "chapter": "시설과 재정",
+    "title": "파트너를 바꾸는 비용을 체험해요",
+    "text": "계약 중이 아닌 운영 파트너 한 곳을 선택하세요.",
+    "concept": "세 파트너 중 한 곳과 반드시 계약합니다. 지원금·승리 보너스·준비 효과가 달라 운영 방식에 맞게 고를 수 있습니다.",
+    "more": "파트너를 변경하면 위약금 2억 원을 즉시 냅니다. 반복해서 바꾸면 손해이므로 주간 지원만 보지 말고 성적과 훈련 계획도 비교하세요.",
+    "view": "finance"
+  },
+  {
+    "id": "transfer",
+    "chapter": "영입과 협상",
+    "title": "조건을 맞춰 2군 선수를 영입해요",
+    "text": "이적 시장에서 안내된 2군 선수를 검색하고 협상을 시작하세요.",
+    "concept": "영입은 확률 뽑기가 아닙니다. 연봉과 설득 조건을 모두 충족해야 계약할 수 있습니다. 충성심이 높은 선수일수록 두 조건이 까다롭습니다.",
+    "more": "즉시 1군 콜업 약속은 2군 선수에게 큰 설득 점수를 줍니다. 계약하면 그 선수가 선발이 되고 같은 포지션의 기존 선발은 2군으로 내려갑니다. 약속을 쓰지 않으면 2군으로 합류합니다.",
+    "view": "transfer"
+  },
+  {
+    "id": "transfer-rules",
+    "chapter": "영입과 협상",
+    "title": "할인·취소·맞교환을 알아둬요",
+    "text": "영입 후 선수단 배치와 팀 합 변화를 확인하세요.",
+    "concept": "외부 영입은 기본 팀 합 −20을 적용합니다. 설득 점수를 기준보다 많이 채우면 필요한 연봉이 단계적으로 낮아집니다.",
+    "more": "진행 중인 협상은 취소할 수 있고 그 주 협상 기회를 돌려받습니다. 다른 구단의 제의는 같은 포지션끼리 1:1 맞교환과 추가 운영 자금이며, 거절하면 우리 선수의 충성심 경험치를 얻습니다. 설명 완료와 조건 부족은 별도로 표시됩니다.",
+    "view": "transfer",
+    "manual": true
+  },
+  {
+    "id": "bracket",
+    "chapter": "대회와 경기",
+    "title": "대회 일정에서 대진표를 여세요",
+    "text": "리그 & 일정으로 이동해 LCK 컵을 누르세요.",
+    "concept": "시즌 일정의 대회를 누르면 대진표·진출 조건·결과를 볼 수 있습니다. 다음 매치와 순위의 구단을 누르면 상대 로스터와 전력을 확인할 수 있습니다.",
+    "more": "시즌은 LCK 컵부터 국제대회·정규 라운드·플레이인·플레이오프를 거쳐 Worlds로 이어집니다. 진출권을 얻어야 출전하는 대회도 있어 우리 팀 경기가 없는 구간이 있습니다.",
+    "view": "league"
+  },
+  {
+    "id": "draft",
+    "chapter": "대회와 경기",
+    "title": "실제 컵 그룹 드래프트를 진행해요",
+    "text": "그룹 드래프트를 열고 시작한 뒤 내 차례에 선택하세요.",
+    "concept": "바론·장로 그룹은 드래프트 결과로 정해집니다. AI 차례는 1~3초 뒤 자동으로 선택하므로 다음 버튼을 반복해서 누를 필요가 없습니다.",
+    "more": "시작 전에는 AI도 고르지 않습니다. 내 차례는 직접 선택해야 하며 드래프트 중에는 구단 전력을 볼 수 없습니다. 완료 후 대진표에서 그룹 구성을 확인할 수 있습니다."
+  },
+  {
+    "id": "tactic",
+    "chapter": "대회와 경기",
+    "title": "경기 전에 전략을 선택해요",
+    "text": "대시보드로 이동해 초반 압박을 선택하세요.",
+    "concept": "전략은 실제 경기 계산에 반영됩니다. 선수 기량뿐 아니라 컨디션·준비 효과·팀 합도 승부에 영향을 줍니다.",
+    "more": "초반 압박은 적극적으로 싸우는 선택입니다. 컨디션 관리와 상대의 강점을 함께 고려하세요. 매번 같은 전략이 반드시 승리를 보장하지는 않습니다.",
+    "view": "dashboard"
+  },
+  {
+    "id": "automation",
+    "chapter": "대회와 경기",
+    "title": "세 가지 자동 진행을 구분해요",
+    "text": "대시보드의 자동 경기 버튼들을 확인하세요.",
+    "concept": "자동 진행은 입력한 횟수만큼 결과를 봅니다. 다음 우리 팀 경기까지 진행은 우리 팀 경기 바로 전에 멈춥니다.",
+    "more": "결승까지 연속 진행은 현재 대회에서 우리 팀 탈락이 확정됐을 때만 켜집니다. 이벤트·지명·훈련 충전 알림은 확인할 때까지 진행을 멈추며 중단 후 직접 운영할 수 있습니다.",
+    "view": "dashboard",
+    "manual": true
+  },
+  {
+    "id": "next-own",
+    "chapter": "대회와 경기",
+    "title": "우리 팀 경기 직전까지만 넘겨요",
+    "text": "다음 우리 팀 경기까지 진행을 누르고 결과·알림을 확인하세요.",
+    "concept": "우리 팀이 출전하지 않는 경기는 관전 결과로 넘기고, 우리 팀 경기는 아직 시작하지 않은 상태로 멈춥니다.",
+    "more": "우리 팀 경기가 바로 다음이라면 한 경기도 넘기지 않습니다. 멈춘 뒤 선수 교체·훈련·전략을 준비하고 직접 경기 시작을 누를 수 있습니다.",
+    "view": "dashboard"
+  },
+  {
+    "id": "match",
+    "chapter": "대회와 경기",
+    "title": "경기를 보고 결과를 읽어요",
+    "text": "경기 시작을 눌러 중계를 본 뒤 경기 결과까지 확인하세요.",
+    "concept": "킬·골드는 현재 흐름, 미니맵은 교전 위치를 보여줍니다. 킬이 많다고 무조건 이기는 것은 아니며 오브젝트와 최종 승패도 확인하세요.",
+    "more": "결과 보기로 애니메이션을 건너뛸 수 있습니다. 토너먼트 승리 결과에는 다음 라운드 진출도 표시됩니다. 우리 팀 탈락과 우승은 별도 연출, 타 구단 탈락은 이벤트로 안내됩니다.",
+    "view": "dashboard"
+  },
+  {
+    "id": "events",
+    "chapter": "알림과 저장",
+    "title": "구단 소식에서 이벤트를 확인해요",
+    "text": "결과 창을 닫고 오른쪽 위 구단 소식을 열어 본 뒤 닫으세요.",
+    "concept": "이벤트는 팬·자금·컨디션·부상에 영향을 줍니다. 발생 팝업에서 실제 효과를 확인하고, 놓쳤다면 구단 소식에서 최근 기록을 읽을 수 있습니다.",
+    "more": "불화가 있는 두 선수가 동시에 선발이면 팀 합 −40%가 적용됩니다. 화해하면 해제됩니다. 부상은 기본 3주 동안 기량 −20이며 휴가가 아닌 컨디션 관리로 기간을 줄입니다.",
+    "view": "dashboard"
+  },
+  {
+    "id": "save",
+    "chapter": "알림과 저장",
+    "title": "저장과 백업 위치를 확인해요",
+    "text": "오른쪽 위 GM 버튼을 눌러 저장 및 설정을 살펴본 뒤 닫으세요.",
+    "concept": "평소에는 같은 브라우저에 자동 저장됩니다. 파일 백업을 내보내면 다른 기기나 배포 주소로 옮겨 불러올 수 있습니다.",
+    "more": "연습 중에는 실제 저장·불러오기·초기화를 잠급니다. 정식 플레이에서 GM 또는 사이드바 저장 및 설정을 열어 백업하세요. 튜토리얼을 다시 봐도 기존 구단은 그대로 복원됩니다.",
+    "view": "dashboard"
+  },
+  {
+    "id": "finish",
+    "chapter": "연습 완료",
+    "title": "이제 정식 구단 운영을 시작해요",
+    "text": "체험한 흐름을 떠올리며 정식 커리어로 이동하세요.",
+    "concept": "매주 팀 합과 컨디션을 확인하고, 훈련·손익·다음 경기를 준비하는 것이 기본 운영 흐름입니다.",
+    "more": "연습에서 사용한 돈·영입·부상·경기는 실제 저장에 남지 않습니다. 새 게임은 선택했던 원래 구단과 파트너로 처음부터 시작하며, 다시 보기였다면 기존 구단으로 돌아갑니다.",
+    "manual": true
+  }
+];
   function tutorialCurrent(){return tutorialSession?tutorialSteps[tutorialSession.step]:null;}
   function tutorialClearHighlight(){for(const node of tutorialSession?.highlighted||[]){node.classList.remove('tutorial-target');node.removeAttribute('data-tutorial-highlight');}if(tutorialSession)tutorialSession.highlighted=[];}
   function tutorialHasModal(){return !!$('.modal');}
+  function tutorialSnapshot(){return {cash:state.cash,chemistry:state.teamChemistry[state.teamId],remaining:E.trainingRemaining(state),partner:state.sponsor.id};}
+  function tutorialOutcome(){
+    const session=tutorialSession,step=tutorialCurrent();if(!session||!tutorialGoal())return '';
+    const before=session.before,after=tutorialSnapshot(),changes=session.results[step.id]?[session.results[step.id]]:[];
+    if(before.cash!==after.cash)changes.push('운영 자금 '+money(before.cash)+' → '+money(after.cash)+' 원');
+    if(before.chemistry!==after.chemistry)changes.push('팀 합 '+before.chemistry+' → '+after.chemistry);
+    if(before.remaining!==after.remaining)changes.push('이번 주 남은 훈련 '+before.remaining+' → '+after.remaining+'회');
+    if(step.id==='roster')changes.unshift('선발과 2군 명단이 실제로 교체됐습니다.');
+    if(step.id==='release')changes.unshift('방출을 취소했습니다. 위약금과 선수단 변동은 없습니다.');
+    if(step.id==='planner')changes.unshift(state.trainingSchedule.weeks.length+'주 훈련 예약이 저장됐습니다. 비용은 실행할 때 차감됩니다.');
+    if(step.id==='partner')changes.unshift('운영 파트너가 '+state.sponsor.name+'(으)로 변경됐습니다.');
+    return changes.join(' · ')||(step.manual?'실제 화면에서 핵심 정보를 확인한 뒤 다음으로 이동하세요.':'실제 조작을 완료했습니다. 결과를 확인한 뒤 다음으로 이동하세요.');
+  }
   function tutorialTarget(){
     const session=tutorialSession,step=tutorialCurrent();if(!session||!step)return '';
     const id=step.id,modal=tutorialHasModal(),html=$('#modal-root').innerHTML;
     if(id==='finish')return '#tutorial-next';
     if(id==='dashboard')return '.metric-grid';
-    if(modal&&!['transfer','bracket','draft','next-own','match'].includes(id))return '.close-modal';
+    if(!step.manual&&tutorialGoal())return '#tutorial-next';
+    if(modal&&!['transfer','bracket','draft','next-own','match','planner'].includes(id))return '.close-modal';
     if(step.view&&view!==step.view)return `[data-nav="${step.view}"]`;
+    if(id==='attributes')return '.section-tabs';
+    if(id==='release')return `[data-release="${session.releaseId}"]`;
+    if(id==='growth')return '.player-attributes';
+    if(id==='infrastructure')return '.facility-grid';
+    if(id==='transfer-rules')return '.market-controls';
+    if(id==='automation')return '.automation-body';
+    if(id==='events')return '#notification-button';
+    if(id==='save')return '#manager-settings-button';
+    if(id==='partner')return `[data-sponsor="${E.SPONSORS.find(p=>p.id!==session.partnerId).id}"]`;
+    if(id==='planner')return !modal?'#training-plan-open':$('#training-plan-focus-0').value!=='teamwork'?'#training-plan-focus-0':'#training-plan-save';
     if(id==='roster')return rosterTier!=='academy'?'[data-roster-tier="academy"]':`[data-callup="${session.callupId}"]`;
     if(id==='mechanics')return focus!=='mechanics'?'[data-focus="mechanics"]':'#train-now';
     if(id==='teamwork')return focus!=='teamwork'?'[data-focus="teamwork"]':'#train-now';
+    if(['conditioning','vacation','scouting'].includes(id))return focus!==id?`[data-focus="${id}"]`:'#train-now';
     if(id==='facility')return '[data-upgrade="training"]';
     if(id==='finance')return '.finance-grid';
     if(id==='transfer'){
@@ -30016,7 +30282,13 @@ window.LCK_ACADEMY_DATA = {
   }
   function tutorialGoal(){
     const session=tutorialSession,id=tutorialCurrent()?.id;if(!session||state!==session.practiceState)return false;
+    if(session.completed[id])return true;
     if(id==='dashboard'||id==='finish')return true;
+    if(stepIsReading(id))return view===tutorialCurrent().view&&!tutorialHasModal();
+    if(['release','events','save'].includes(id))return !!session.evidence[id]&&!tutorialHasModal();
+    if(['conditioning','vacation','scouting'].includes(id))return !!session.evidence[id];
+    if(id==='planner')return !!state.trainingSchedule?.weeks.length&&state.trainingSchedule.weeks[0].sessions.some(s=>s.focus==='teamwork')&&!tutorialHasModal();
+    if(id==='partner')return state.sponsor.id!==session.partnerId;
     if(id==='roster')return state.rosters[state.teamId].some(p=>p.id===session.callupId);
     if(id==='mechanics')return !!session.evidence.mechanics;
     if(id==='teamwork')return !!state.preparation.teamworkTrained;
@@ -30030,28 +30302,38 @@ window.LCK_ACADEMY_DATA = {
     if(id==='match')return !!session.evidence.manualMatch&&!replaySession&&!pendingEventNotice&&!pendingTournamentNotice&&$('#modal-root').innerHTML.includes('result-score');
     return false;
   }
+  function stepIsReading(id){return ['attributes','growth','infrastructure','finance','transfer-rules','automation'].includes(id);}
   function updateTutorial(reveal=false){
     const session=tutorialSession;if(!session||state!==session.practiceState)return;
     const step=tutorialCurrent(),target=tutorialTarget(),ready=tutorialGoal(),move=reveal||session.lastTarget!==target;session.lastTarget=target;tutorialClearHighlight();
-    const root=$('#tutorial-root');if(!root.innerHTML)root.innerHTML='<aside class="tutorial-coach" role="region" aria-labelledby="tutorial-heading"><div class="tutorial-coach-top"><span id="tutorial-progress"></span><button id="tutorial-collapse" aria-label="안내 접기">접기</button><button id="tutorial-exit" aria-label="튜토리얼 종료">×</button></div><h2 id="tutorial-heading"></h2><p class="tutorial-instruction" id="tutorial-instruction"></p><p class="tutorial-state" id="tutorial-status" role="status" aria-live="polite"></p><div class="tutorial-actions"><button class="text-button" id="tutorial-skip"></button><button class="button primary" id="tutorial-next"></button></div></aside>';
+    const root=$('#tutorial-root');if(!root.innerHTML){root.innerHTML='<aside class="tutorial-coach" role="region" aria-labelledby="tutorial-heading"><div class="tutorial-coach-top"><span id="tutorial-progress"></span><button id="tutorial-collapse" aria-label="안내 접기">접기</button><button id="tutorial-exit" aria-label="튜토리얼 종료">×</button></div><span class="tutorial-chapter" id="tutorial-chapter"></span><h2 id="tutorial-heading"></h2><p class="tutorial-concept" id="tutorial-concept"></p><div class="tutorial-do-label">지금 해보기</div><p class="tutorial-instruction" id="tutorial-instruction"></p><details class="tutorial-more" id="tutorial-more"><summary>더 알아보기</summary><p id="tutorial-more-copy"></p></details><p class="tutorial-outcome" id="tutorial-outcome" role="status" aria-live="polite"></p><p class="tutorial-state" id="tutorial-status"></p><div class="tutorial-actions"><button class="text-button" id="tutorial-skip"></button><button class="button primary" id="tutorial-next"></button></div></aside>';$('#tutorial-more').addEventListener('toggle',()=>updateTutorial());}
     const coach=$('.tutorial-coach');if(window.innerWidth<=700&&tutorialHasModal())coach.classList.remove('tutorial-coach-top-position');coach.dataset.tutorialStep=step.id;coach.dataset.target=target;coach.setAttribute('data-collapsed',String(session.collapsed));$('#tutorial-progress').textContent=`실제 화면 연습 · ${session.step+1} / ${tutorialSteps.length}`;$('#tutorial-heading').textContent=step.title;
-    let detail=step.text;if(step.id==='transfer')detail=`${session.transferName} 선수를 영입해 보세요. `+step.text;
+    if(session.renderedStep!==step.id){$('#tutorial-more').open=false;session.renderedStep=step.id;}
+    $('#tutorial-chapter').textContent=step.chapter;$('#tutorial-concept').textContent=step.concept;$('#tutorial-more-copy').textContent=step.more;$('#tutorial-outcome').textContent=ready?tutorialOutcome():'';
+    let detail=step.text;if(step.id==='transfer'){const n=E.negotiationStatus(state,session.transferId);detail=!n?`${session.transferName} 선수를 2군에서 검색한 뒤 협상을 여세요.`:!n.immediateCallup?'‘즉시 1군 콜업’을 선택해 설득 점수를 채우세요.':!n.salaryMet?'할인 적용 후 필요한 연봉을 확인하고, 그 이상을 입력해 연봉 제안을 누르세요.':'연봉·설득 두 조건을 확인한 뒤 계약 체결을 누르세요.';}if(ready&&!step.manual)detail='조작을 완료했습니다. 아래의 실제 결과를 확인하고 다음으로 이동하세요.';
     $('#tutorial-instruction').textContent=detail;$('#tutorial-status').textContent=(session.lastCompleted?'✓ '+session.lastCompleted+' 완료 · ':'')+'연습 중 · 실제 저장에는 반영되지 않습니다.';
-    $('#tutorial-collapse').textContent=session.collapsed?'펼치기':'접기';$('#tutorial-next').disabled=!step.manual||!ready;$('#tutorial-next').textContent=step.id==='finish'?(session.mode==='start'?'정식 커리어 시작':'기존 구단으로 돌아가기'):step.manual?'확인했어요':'강조된 실제 버튼을 조작하세요';
+    $('#tutorial-collapse').textContent=session.collapsed?'펼치기':'접기';$('#tutorial-next').disabled=!ready;$('#tutorial-next').textContent=step.id==='finish'?(session.mode==='start'?'정식 커리어 시작':'기존 구단으로 돌아가기'):ready?(step.manual?'이해했어요 · 다음':'결과 확인 · 다음'):'실제 조작 후 다음';
     $('#tutorial-skip').textContent=session.mode==='start'?'건너뛰고 새로 시작':'연습 종료';
     const nodes=document.querySelectorAll?Array.from(document.querySelectorAll(target)):[$(target)];const node=nodes.find(n=>typeof n.getClientRects!=='function'||n.getClientRects().length)||nodes[0];
     if(node){node.classList.add('tutorial-target');node.setAttribute('data-tutorial-highlight',step.id);session.highlighted=[node];if(move&&node.scrollIntoView)node.scrollIntoView({block:'center',inline:'center',behavior:'auto'});if(move&&!node.disabled&&node.matches?.('button,a,input,select'))node.focus({preventScroll:true});if(node.getBoundingClientRect&&coach.getBoundingClientRect){const a=node.getBoundingClientRect(),b=coach.getBoundingClientRect(),height=window.innerHeight;if(Number.isFinite(height)&&!(window.innerWidth<=700&&tutorialHasModal())){const bottom=height-22,top=bottom-b.height;coach.classList.toggle('tutorial-coach-top-position',a.bottom>top&&a.top<bottom&&a.right>b.left&&a.left<b.right);}document.body.style?.setProperty('--tutorial-coach-space',Math.max(66,Math.ceil(b.height)+24)+'px');}}
   }
-  function tutorialObserve(){const session=tutorialSession;if(!session||session.updating||state!==session.practiceState)return;session.updating=true;try{const step=tutorialCurrent();if(!step.manual&&tutorialGoal()){session.lastCompleted=step.title;session.step++;updateTutorial(true);}else updateTutorial();}finally{session.updating=false;}}
-  function tutorialRecord(kind,result){if(tutorialSession&&state===tutorialSession.practiceState&&result?.ok){tutorialSession.evidence[kind]=true;tutorialObserve();}}
+  function tutorialObserve(){const session=tutorialSession;if(!session||session.updating||state!==session.practiceState)return;session.updating=true;try{const id=tutorialCurrent().id,html=$('#modal-root').innerHTML;if(id==='release'&&html.includes('release-summary')||id==='events'&&html.includes('구단 소식')||id==='save'&&html.includes('id="export-save"'))session.evidence[id]=true;if(tutorialGoal())session.completed[id]=true;updateTutorial();}finally{session.updating=false;}}
+  function tutorialRecord(kind,result){if(tutorialSession&&state===tutorialSession.practiceState&&result?.ok){tutorialSession.evidence[kind]=true;tutorialSession.results[kind]=result.message;tutorialObserve();}}
   function tutorialAllows(el){
     const session=tutorialSession;if(!session)return true;const step=tutorialCurrent(),id=step.id,d=el.dataset||{};
     if(['tutorial-next','tutorial-skip','tutorial-exit','tutorial-collapse'].includes(el.id))return true;
     if(el.classList.contains('close-modal'))return true;
+    if(!step.manual&&tutorialGoal())return false;
     if(['next-own','match'].includes(id)&&['auto-event-confirm','auto-tournament-confirm'].includes(el.id))return true;
     if(d.nav)return d.nav===step.view;
+    if(id==='attributes')return ['main','academy'].includes(d.rosterTier)||!!d.playerEvidence;
     if(id==='roster')return d.rosterTier==='academy'||d.callup===session.callupId;
-    if(id==='mechanics'||id==='teamwork')return d.focus===(id==='mechanics'?'mechanics':'teamwork')||id==='mechanics'&&['laning','combat'].includes(d.trainingAttribute)||el.id==='train-now'&&focus===(id==='mechanics'?'mechanics':'teamwork');
+    if(id==='release')return d.release===session.releaseId;
+    if(['mechanics','teamwork','conditioning','vacation','scouting'].includes(id))return d.focus===id||id==='mechanics'&&['laning','combat'].includes(d.trainingAttribute)||el.id==='train-now'&&focus===id;
+    if(id==='planner')return ['training-plan-open','training-plan-save'].includes(el.id);
+    if(id==='partner')return d.sponsor!==session.partnerId&&E.SPONSORS.some(p=>p.id===d.sponsor);
+    if(id==='events')return el.id==='notification-button';
+    if(id==='save')return ['manager-settings-button','settings-button','mobile-settings-button'].includes(el.id);
     if(id==='facility')return d.upgrade==='training';
     if(id==='transfer')return d.marketTier==='academy'||d.transfer===session.transferId||d.persuade==='immediate-callup'&&d.negotiationPlayer===session.transferId||['submit-salary','confirm-transfer','cancel-transfer','clear-transfer-search'].includes(el.id);
     if(id==='bracket')return d.competitionStage==='cup';
@@ -30068,10 +30350,10 @@ window.LCK_ACADEMY_DATA = {
     matchRequestVersion++;stopAutoMatches();stopCupDraftAuto();stopReplay();busy=false;pendingEventNotice=null;pendingTournamentNotice=null;eventNoticeSession=null;$('#modal-root').innerHTML='';document.body.classList.remove('modal-open');
     const practice=E.newPracticeGame(teamId,partnerId),targets=D.teams.filter(t=>t.id!==teamId).flatMap(t=>practice.reserves[t.id]).filter(p=>p.loyalty<=70).sort((a,b)=>a.loyalty-b.loyalty||a.salary-b.salary||a.id.localeCompare(b.id)),target=targets[0];
     if(!target)throw new Error('연습에 사용할 영입 선수를 찾지 못했습니다.');
-    tutorialSession={mode,original,teamId,partnerId,practiceState:practice,callupId:practice.reserves[teamId][0].id,transferId:target.id,transferName:target.name,step:0,evidence:{},collapsed:false,highlighted:[],lastCompleted:'',updating:false};
+    tutorialSession={mode,original,teamId,partnerId,practiceState:practice,callupId:practice.reserves[teamId][0].id,releaseId:practice.reserves[teamId][1].id,transferId:target.id,transferName:target.name,step:0,evidence:{},completed:{},results:{},before:{cash:practice.cash,chemistry:practice.teamChemistry[teamId],remaining:E.trainingRemaining(practice),partner:practice.sponsor.id},collapsed:false,highlighted:[],lastCompleted:'',updating:false};
     state=practice;view='dashboard';rosterTier='main';focus='teamwork';intensity='normal';trainingPlayerId=null;trainingAttribute='laning';transferRole='ALL';transferTier='ALL';transferSearch='';transferSort='rating';transferSortDirection='desc';resultGame=0;document.body.classList.add('tutorial-active');render();updateTutorial(true);$('#tutorial-next').focus();
   }
-  function advanceTutorial(){const session=tutorialSession,step=tutorialCurrent();if(!session||!step.manual||!tutorialGoal())return;if(step.id==='finish')return finishTutorial(session.mode==='start');session.lastCompleted=step.title;session.step++;updateTutorial(true);}
+  function advanceTutorial(){const session=tutorialSession,step=tutorialCurrent();if(!session||!tutorialGoal())return;if(step.id==='finish')return finishTutorial(session.mode==='start');session.lastCompleted=step.title;session.step++;session.before=tutorialSnapshot();updateTutorial(true);}
   function finishTutorial(startCareer=false){
     const session=tutorialSession;if(!session)return;const original=session.original;tutorialClearHighlight();tutorialSession=null;matchRequestVersion++;state=original.state;stopAutoMatches();stopCupDraftAuto();stopReplay();busy=false;pendingEventNotice=null;pendingTournamentNotice=null;eventNoticeSession=null;cupDraftNeedsRender=false;$('#modal-root').innerHTML='';$('#tutorial-root').innerHTML='';document.body.classList.remove('modal-open','tutorial-active');document.body.style?.removeProperty('--tutorial-coach-space');
     state=original.state;view=original.view;selectedId=original.selectedId;selectedPartnerId=original.selectedPartnerId;focus=original.focus;intensity=original.intensity;trainingPlayerId=original.trainingPlayerId;trainingAttribute=original.trainingAttribute;transferRole=original.transferRole;transferTier=original.transferTier;transferSearch=original.transferSearch;transferSort=original.transferSort;transferSortDirection=original.transferSortDirection;rosterTier=original.rosterTier;resultGame=original.resultGame;sidebarCalendarCareer=original.sidebarCalendarCareer;sidebarCalendarDate=original.sidebarCalendarDate;sidebarCalendarMonth=original.sidebarCalendarMonth;pendingEventNotice=original.pendingEventNotice;pendingTournamentNotice=original.pendingTournamentNotice;render();
@@ -30082,7 +30364,6 @@ window.LCK_ACADEMY_DATA = {
     if(state||!D.teams.some(t=>t.id===teamId)||!E.SPONSORS.some(p=>p.id===partnerId))return;
     clearEventNotices();state=E.newGame(teamId,partnerId);rosterTier='main';transferTier='ALL';transferRole='ALL';transferSearch='';transferSort='rating';transferSortDirection='desc';trainingPlayerId=null;trainingAttribute='laning';focus='teamwork';view='dashboard';render();toast(`${team(teamId).name}의 단장으로 취임했습니다.`);window.scrollTo(0,0);if(E.getCupDraft(state)&&E.getCupDraft(state).status!=='complete')openCupDraft();
   }
-
   function render(){
     const club = state ? team(state.teamId) : null;
     document.documentElement.style.setProperty('--club-color',club?.color || team(selectedId).color);
@@ -30613,7 +30894,7 @@ window.LCK_ACADEMY_DATA = {
   }
   function openTeamEvidence(id){const r=ratingResearch().teams?.[id],initial=typeof r?.initial==='number'?r.initial:75,notes=(Array.isArray(r?.notes)?r.notes:[]).filter(n=>typeof n==='string');openModal(`${esc(team(id).name)} · 팀 합 기준`,`<div class="rating-evidence"><p>팀 합은 <strong>미평가</strong>입니다. 실제 팀 간 호흡·소통·연계 실수 빈도를 같은 기준으로 비교할 공개 자료가 부족해 모든 구단이 게임 기본값 <strong>${initial}</strong>에서 시작합니다.</p><p>현재 기본 팀 합 <strong>${finiteText(state?.teamChemistry?.[id]??initial)}</strong>은 게임에서의 팀워크 훈련을 반영한 수치입니다. 팀워크 경험치를 채워야 기본 팀 합이 1 상승하며 높은 팀 합일수록 더 많은 경험치가 필요합니다. 실수 확률도 게임 규칙으로 계산되며 실제 구단의 실수율을 나타내지 않습니다.</p><ul class="evidence-notes">${notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul><p>친화력은 55~85로 설정한 고정 게임 밸런스 값이며 선발 평균 친화력이 팀워크 훈련에 반영됩니다. 선수단 변경 후에도 팀 합은 커리어에서 유지됩니다.</p></div>`,`<button class="button secondary close-modal">확인</button>`);}
   function openHelp(){openTutorial('review');}
-  function openSettings(){openModal('저장 및 설정',`<div class="settings-grid"><div class="setting-row"><div><h3>튜토리얼</h3></div><button class="button secondary" id="tutorial-review">다시 보기</button></div><div class="setting-row"><div><h3>커리어 백업</h3><p>현재 진행 상황을 JSON 파일로 보관합니다.</p></div><button class="button secondary" id="export-save" ${!state?'disabled':''}>저장 내보내기</button></div><div class="setting-row"><div><h3>저장 불러오기</h3><p>백업 파일에서 커리어를 이어갑니다.</p></div><button class="button secondary" id="import-save">파일 선택</button></div><div class="setting-row"><div><h3>새 커리어</h3><p>다른 구단으로 다시 시작합니다. 현재 저장을 먼저 백업할 수 있습니다.</p></div><button class="button danger" id="reset-career">새로 시작</button></div></div><p class="data-note">동일한 브라우저에서 자동 저장됩니다. 브라우저 데이터를 삭제하면 저장이 사라지므로 중요한 커리어는 백업해 주세요.</p>`);}
+  function openSettings(){openModal('저장 및 설정',`<div class="settings-grid"><div class="setting-row"><div><h3>튜토리얼</h3></div><button class="button secondary" id="tutorial-review" ${tutorialSession?'disabled':''}>다시 보기</button></div><div class="setting-row"><div><h3>커리어 백업</h3><p>현재 진행 상황을 JSON 파일로 보관합니다.</p></div><button class="button secondary" id="export-save" ${!state||tutorialSession?'disabled':''}>저장 내보내기</button></div><div class="setting-row"><div><h3>저장 불러오기</h3><p>백업 파일에서 커리어를 이어갑니다.</p></div><button class="button secondary" id="import-save" ${tutorialSession?'disabled':''}>파일 선택</button></div><div class="setting-row"><div><h3>새 커리어</h3><p>다른 구단으로 다시 시작합니다. 현재 저장을 먼저 백업할 수 있습니다.</p></div><button class="button danger" id="reset-career" ${tutorialSession?'disabled':''}>새로 시작</button></div></div><p class="data-note">동일한 브라우저에서 자동 저장됩니다. 브라우저 데이터를 삭제하면 저장이 사라지므로 중요한 커리어는 백업해 주세요.</p>`);}
   function openSources(){openModal('데이터 출처 및 게임 정보',`<div class="guide-copy"><h3>2026 LCK 구단 · 선수 스냅샷</h3><p>공식 등록 명단에서 포지션별 5명을 게임용으로 선정했습니다. 8개 팀은 2026년 8월 26일, DN SOOPers는 7월 24일 자료, KIWOOM DRX는 공식 팀 페이지를 참고했습니다. 실제 경기 선발 명단과 다를 수 있습니다.</p><div class="source-list">${D.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.label)} ↗</a>`).join('')}</div><h3>2군 로스터 출처</h3><p>${esc(A.snapshotLabel || '공식 등록 2군 선수 명단 기반')} · 포지션별 등록 선수를 게임용으로 선정했습니다. 1군과 중복되는 선수는 제외했으며 실제 선발·콜업 현황과 다를 수 있습니다.</p><div class="source-list">${(A.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.label)} ↗</a>`).join('')}</div><h3>중계 스타일 참고 자료</h3><p>공개된 본인 인터뷰와 본인 채널 제목을 참고해 성캐의 상황 전달, 클템의 흐름 해설, 전용준 캐스터의 시작·승부처 진행 특징을 게임용 창작 대사로 옮겼습니다.</p><p>전용준의 시작 구호와 클템 채널의 짧은 위기 표현은 확인했습니다. 성캐의 고유 반복 구호나 멘트 사용 빈도는 검증하지 않았습니다.</p><div class="source-list"><a href="https://www.inven.co.kr/webzine/news/?news=310997" target="_blank" rel="noopener noreferrer">인벤 본인 인터뷰: 중계는 곧 공감 (2025-11-04) ↗</a><a href="https://v.daum.net/v/kstDYTGklu" target="_blank" rel="noopener noreferrer">데일리e스포츠 본인 인터뷰: 배움을 멈추지 않는 20년 차 베테랑 (2021-07-03) ↗</a><a href="https://v.daum.net/v/20180928090712861" target="_blank" rel="noopener noreferrer">아이뉴스24 본인 인터뷰: 클펠레? LoL 즐기는 또 다른 재미되길 (2018-09-28) ↗</a><a href="https://www.youtube.com/watch?v=5Fb0ZPTeC94" target="_blank" rel="noopener noreferrer">클템 본인 인증 채널: 2025 LCK 플레이오프 젠지 대 KT 리뷰 제목 (2025-09-13) ↗</a><a href="https://www.snunews.com/news/articleView.html?idxno=21661" target="_blank" rel="noopener noreferrer">대학신문 본인 인터뷰: 경기를 시작~하겠습니다! (2020-11-15) ↗</a><a href="https://m.inews24.com/v/119266" target="_blank" rel="noopener noreferrer">아이뉴스24 본인 인터뷰: 박진감 넘치게 중계하는거죠 (2004-07-09) ↗</a></div><h3>공개 기록 기반 초기 평가</h3>${researchOverview()}<h3>게임에 적용한 설정</h3><p>공개 기록의 환산 수치는 공식 선수 평가가 아닙니다. 충성심은 현재 구단 연속 재직 기간을 환산합니다. 잠재력은 전체 선수의 기량 분포를 바탕으로 성장 속도를 조정한 고정 균형값입니다. 친화력은 55~85의 고정 게임 밸런스 값이며 팀 합은 공통 기본값 75에서 시작합니다. 초기 2군 기량은 최고 60으로 환산하고 훈련 상한은 100입니다. 훈련에 따른 변화, 연봉, 예산, 팬 수, 스폰서와 시뮬레이션 경기 통계는 게임 설정입니다. 실제 성격·계약·경기 결과를 나타내지 않습니다.</p><p>대회 달력과 브래킷은 2026 공식 규정을 기준으로 구현하며, 컵의 바론·장로 그룹은 플레이어와 AI가 드래프트로 구성합니다. 해외 참가 구단은 대회별 공식 명단을 사용하며 해외 로스터와 능력치는 포지션별 대표를 쓰는 게임 전력 모형입니다. LCK 선수단은 기존 2026 로스터 스냅샷을 사용하며 월별 실제 이적을 강제로 재현하지 않습니다.</p><p>Riot Games 또는 LCK와 제휴하거나 승인을 받은 공식 게임이 아닌 팬 메이드 프로젝트입니다.</p></div>`,`<button class="button secondary close-modal">확인</button>`,true);}
   function openTransfer(playerId){
     let entry;for(const t of D.teams)for(const tier of ['main','academy']){const list=tier==='main'?state.rosters[t.id]:(state.reserves?.[t.id]||[]),p=list.find(p=>p.id===playerId);if(p)entry={...p,teamId:t.id,tier};}
@@ -30650,7 +30931,7 @@ window.LCK_ACADEMY_DATA = {
     const value=$('#training-plan-focus-'+i).value;
     $('#training-plan-intensity-'+i).disabled=['none','vacation'].includes(value);
     $('#training-plan-player-'+i).disabled=!['mechanics','vacation'].includes(value);
-    $('#training-plan-attribute-'+i).disabled=value!=='mechanics';
+    $('#training-plan-attribute-'+i).disabled=value!=='mechanics';tutorialObserve();
   }
   function saveTrainingPlanner() {
     const sessions=[];
@@ -30756,6 +31037,7 @@ window.LCK_ACADEMY_DATA = {
     const el=e.target.closest('button,a.brand');if(!el)return;
     if(!tutorialAllows(el)){e.preventDefault?.();return;}
     try{
+    if(['tutorial-next','tutorial-skip','tutorial-exit','tutorial-collapse'].includes(el.id)){if(el.id==='tutorial-next')advanceTutorial();else if(el.id==='tutorial-skip')finishTutorial(tutorialSession?.mode==='start');else if(el.id==='tutorial-exit')finishTutorial(false);else if(tutorialSession){tutorialSession.collapsed=!tutorialSession.collapsed;updateTutorial();}return;}
     if(el.dataset.sidebarMonth){browseSidebarCalendar(Number(el.dataset.sidebarMonth));return;}
     if(el.dataset.sidebarToday){browseSidebarCalendar(0);return;}
     if(autoMatchSession&&['auto-match-start','auto-match-next-player','auto-match-final'].includes(el.id))return;
@@ -30844,7 +31126,7 @@ window.LCK_ACADEMY_DATA = {
   document.addEventListener('input',e=>{updateTransferSearch(e);tutorialObserve();});
   document.addEventListener('compositionend',updateTransferSearch);
   document.addEventListener('change',e=>{
-    if(/^training-plan-focus-[0-2]$/.test(e.target.id)){updateTrainingPlanSlot(Number(e.target.id.slice(-1)));return;}
+    if(/^training-plan-focus-[0-4]$/.test(e.target.id)){updateTrainingPlanSlot(Number(e.target.id.slice(-1)));return;}
     if(e.target.id==='training-player'){trainingPlayerId=e.target.value;render();}
     if(!state||view!=='transfer')return;
     if(e.target.id==='transfer-sort'&&transferSortOptions.some(([id])=>id===e.target.value)){transferSort=e.target.value;updateTransferResults();}
