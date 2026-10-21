@@ -29750,7 +29750,7 @@ window.LCK_ACADEMY_DATA = {
     const ids=Object.keys(game.kills||{});
     homeId=homeId||ids[0];awayId=awayId||ids.find(id=>id!==homeId);
     progress=clamp(progress);
-    const duration=Math.max(1,Number(game.durationSeconds)||1800),seconds=progress===1?duration:Math.floor(duration*progress);
+    const duration=Math.max(1,Number(game.durationSeconds)||1800),motionSeconds=duration*progress,seconds=progress===1?duration:Math.floor(motionSeconds);
     const entries=(game.events||[]).map((event,index)=>({event,index,seconds:eventSeconds(event,duration)})).sort((a,b)=>a.seconds-b.seconds);
     const occurred=entries.filter(e=>e.seconds<=seconds),latest=occurred.at(-1);
     const opening=entries.find(e=>e.event.type==='kill');
@@ -29777,8 +29777,16 @@ window.LCK_ACADEMY_DATA = {
       const startingGold=Math.min(2500,total);
       gold[id]=progress===1?total:Math.round(startingGold+(total-startingGold)*Math.pow(progress,.94));
     }
-    const active=entries.filter(e=>seconds>=e.seconds-65&&seconds<=e.seconds+85).sort((a,b)=>Math.abs(seconds-a.seconds)-Math.abs(seconds-b.seconds))[0];
-    const eventPulse=latest?clamp(1-(seconds-latest.seconds)/55):0;
+    // Blend every overlapping scene instead of snapping to the nearest one.
+    // Position uses fractional time; score and event gates still use whole seconds.
+    // Keep approach/release durations consistent on screen for longer matches too.
+    const approach=Math.max(65,duration*.05),release=Math.max(85,duration*.065);
+    const movement=entries.map(entry=>{
+      const offset=motionSeconds-entry.seconds;
+      return {entry,point:eventPoint(entry.event,homeId),weight:offset<0?ease((offset+approach)/approach):1-ease(offset/release)};
+    }).filter(scene=>scene.weight>0);
+    const recent=occurred.filter(entry=>seconds-entry.seconds<28);
+    const eventPulse=latest?clamp(1-(motionSeconds-latest.seconds)/55):0;
     const objectiveEvents=occurred.filter(e=>['dragon','baron','tower','nexus'].includes(e.event.type));
     const objectives={};
     for(const id of [homeId,awayId])objectives[id]={dragon:0,baron:0,tower:0,nexus:false};
@@ -29792,28 +29800,32 @@ window.LCK_ACADEMY_DATA = {
     };
     const tokens=(game.players||[]).map((player,index)=>{
       const home=player.teamId===homeId,roleIndex=Math.max(0,ROLES.indexOf(player.role));
-      const side=home?1:-1,phase=seconds/42+index*1.8;
+      const side=home?1:-1,phase=motionSeconds/42+index*1.8;
       const lanes={TOP:home?[84,150]:[194,66],MID:home?[225,245]:[297,187],ADC:home?[333,368]:[457,272],SUP:home?[319,381]:[442,258],JGL:home?[184,296]:[352,163]};
       let [x,y]=lanes[player.role]||[260,220];
       x+=Math.sin(phase)*11;y+=Math.cos(phase*.72)*9;
-      if(player.role==='JGL'){x+=Math.sin(seconds/79)*39;y+=Math.cos(seconds/67)*37;}
-      const spawn=home?[54,370]:[466,60],departure=ease(seconds/115);
+      if(player.role==='JGL'){x+=Math.sin(motionSeconds/79)*39;y+=Math.cos(motionSeconds/67)*37;}
+      const spawn=home?[54,370]:[466,60],departure=ease(motionSeconds/115);
       x=spawn[0]+(x-spawn[0])*departure;y=spawn[1]+(y-spawn[1])*departure;
-      let dead=false,disoriented=false;
-      if(active){
-        const target=eventPoint(active.event,homeId);
-        const time=seconds-active.seconds;
-        let gather=time<0?ease((time+65)/65):1-ease(time/85);
-        if(active.event.type==='kill'&&['TOP','ADC','SUP'].includes(player.role))gather*=.16;
-        if(active.event.type==='tower'&&player.role==='JGL')gather*=.55;
-        const angle=roleIndex*1.27+(home?2.9:.15),distance=home?31:43;
-        x+=(target[0]+Math.cos(angle)*distance-x)*gather;
-        y+=(target[1]+Math.sin(angle)*distance-y)*gather;
-        const recordedDeaths=active.event.killDelta?.[player.teamId===homeId?awayId:homeId];
-        dead=['kill','fight'].includes(active.event.type)&&time>=0&&time<28&&(Number.isInteger(recordedDeaths)?roleIndex<recordedDeaths:player.teamId!==active.event.teamId&&roleIndex===(active.event.type==='kill'?2:3));
-        disoriented=active.event.type==='mistake'&&player.teamId===active.event.teamId&&time>=0&&time<28;
+      let weight=0,targetX=0,targetY=0,remaining=1;
+      const angle=roleIndex*1.27+(home?2.9:.15),distance=home?31:43;
+      for(const scene of movement){
+        let influence=scene.weight;
+        if(scene.entry.event.type==='kill'&&['TOP','ADC','SUP'].includes(player.role))influence*=.16;
+        if(scene.entry.event.type==='tower'&&player.role==='JGL')influence*=.55;
+        weight+=influence;remaining*=1-influence;
+        targetX+=(scene.point[0]+Math.cos(angle)*distance)*influence;
+        targetY+=(scene.point[1]+Math.sin(angle)*distance)*influence;
       }
-      return {playerId:player.playerId,name:player.name,role:player.role,teamId:player.teamId,x:Math.round(x*100)/100,y:Math.round(y*100)/100,dead,disoriented,side:home?'home':'away'};
+      if(weight>0){x+=(targetX/weight-x)*(1-remaining);y+=(targetY/weight-y)*(1-remaining);}
+      // Death/error feedback follows occurred records independently of movement targets.
+      const dead=recent.some(({event})=>{
+        if(!['kill','fight'].includes(event.type))return false;
+        const deaths=event.killDelta?.[player.teamId===homeId?awayId:homeId];
+        return Number.isInteger(deaths)?roleIndex<deaths:player.teamId!==event.teamId&&roleIndex===(event.type==='kill'?2:3);
+      });
+      const disoriented=recent.some(({event})=>event.type==='mistake'&&player.teamId===event.teamId);
+      return {playerId:player.playerId,name:player.name,role:player.role,teamId:player.teamId,x,y,dead,disoriented,side:home?'home':'away'};
     });
     return {progress,seconds,time:clock(seconds),kills,gold,tokens,events:occurred.map(e=>e.event),currentEvent:latest?.event||null,eventIndex:latest?.index??-1,eventPulse,eventPoint:latest?eventPoint(latest.event,homeId):[260,220],objectives,mistakes,phases,complete:progress===1};
   }
