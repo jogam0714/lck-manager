@@ -27603,6 +27603,17 @@ window.LCK_ACADEMY_DATA = {
     state.schemaVersion = 4;
   }
 
+  function validGameTimeline(game, homeId, awayId) {
+    if (game.timeline === undefined) return true;
+    const rows = game.timeline, ids = [homeId, awayId];
+    if (!Array.isArray(rows) || rows.length < 2 || rows.length > 120 || rows[0]?.second !== 0 || rows.at(-1)?.second !== game.durationSeconds) return false;
+    return rows.every((row, index) => row && Number.isInteger(row.second) && row.second >= 0 && row.second <= game.durationSeconds
+      && (!index || row.second > rows[index - 1].second)
+      && ids.every(id => Number.isInteger(row.gold?.[id]) && row.gold[id] >= 0 && row.gold[id] <= game.gold[id]
+        && Number.isInteger(row.kills?.[id]) && row.kills[id] >= 0 && row.kills[id] <= game.kills[id]
+        && (!index ? row.gold[id] === 2500 && row.kills[id] === 0 : row.gold[id] >= rows[index - 1].gold[id] && row.kills[id] >= rows[index - 1].kills[id])
+        && (index !== rows.length - 1 || row.gold[id] === game.gold[id] && row.kills[id] === game.kills[id])));
+  }
   function validMatch(match, ids, playerIds) {
     if(!match||!validProgressions(match.progressions,ids))return false;
     if (!match || typeof match.id !== 'string' || !ids.includes(match.homeId) || !ids.includes(match.awayId) || match.homeId === match.awayId || !ids.includes(match.winnerId) || !ids.includes(match.loserId) || match.winnerId === match.loserId || !['regular', 'semifinal', 'final','competition'].includes(match.phase)) return false;
@@ -27624,6 +27635,7 @@ window.LCK_ACADEMY_DATA = {
         if (sum(lineup.map(p => p.kills)) !== game.kills[id] || sum(lineup.map(p => p.deaths)) !== game.kills[other] || sum(lineup.map(p => p.gold)) !== game.gold[id]) return false;
       }
       if (game.events.some(e => !e || !ids.includes(e.teamId) || !Number.isFinite(e.minute) || e.minute < 0 || e.minute > game.durationSeconds / 60 || ['time', 'type', 'title', 'description'].some(k => typeof e[k] !== 'string'))) return false;
+      if (!validGameTimeline(game, match.homeId, match.awayId)) return false;
       if (game.lanes !== undefined && (!Array.isArray(game.lanes) || game.lanes.length !== 5 || new Set(game.lanes.map(l => l && l.role)).size !== 5 || game.lanes.some(l => !l || !ROLES.includes(l.role) || ![match.homeId, match.awayId].includes(l.winnerId) || !Number.isFinite(l.homeChance) || l.homeChance < 0 || l.homeChance > 100 || !game.players.some(p => p.playerId === l.homePlayerId && p.teamId === match.homeId && p.role === l.role) || !game.players.some(p => p.playerId === l.awayPlayerId && p.teamId === match.awayId && p.role === l.role)))) return false;
       if (game.teamfight !== undefined && (!game.teamfight || ![match.homeId, match.awayId].includes(game.teamfight.winnerId) || !Number.isFinite(game.teamfight.homeChance) || game.teamfight.homeChance < 0 || game.teamfight.homeChance > 100)) return false;
       if (game.mistakes !== undefined && (!Array.isArray(game.mistakes) || game.mistakes.length > 4 || game.mistakes.some(m => !m || ![match.homeId, match.awayId].includes(m.teamId) || !['laning', 'fight'].includes(m.stage)))) return false;
@@ -28296,76 +28308,170 @@ window.LCK_ACADEMY_DATA = {
   function mistakeChance(state, id) { return clamp(0.62 - effectiveChemistry(state,id) * 0.006, 0.02, 0.62); }
   function readiness(player) { return player.form + (player.condition - 88) * 0.1 + (player.morale - 75) * 0.035; }
   function chanceForDifference(home, away, scale) { return clamp(1 / (1 + Math.exp((away - home) / scale)), 0.03, 0.97); }
-  function matchStats(state, teamId, kills, enemyKills, durationSeconds, won) {
-    const roster = matchRoster(state,teamId);
-    const killWeights = { TOP: 0.18, JGL: 0.18, MID: 0.27, ADC: 0.32, SUP: 0.05 };
+  /* EVENT-DRIVEN MATCH SIMULATION START */
+  function matchStats(state, teamId, kills, enemyKills, durationSeconds, totalGold) {
+    const roster = matchRoster(state, teamId);
+    const weights = { TOP: 0.18, JGL: 0.18, MID: 0.27, ADC: 0.32, SUP: 0.05 };
     const deaths = [0, 0, 0, 0, 0], allocations = [0, 0, 0, 0, 0];
-    for (let i = 0; i < kills; i++) {
+    for (let n = 0; n < kills; n++) {
       let point = rng(state), index = 0;
-      for (; index < roster.length - 1; index++) { point -= killWeights[roster[index].role]; if (point <= 0) break; }
+      for (; index < 4; index++) { point -= weights[roster[index].role]; if (point <= 0) break; }
       allocations[index]++;
     }
-    for (let i = 0; i < enemyKills; i++) deaths[integer(state, 0, 4)]++;
+    for (let n = 0; n < enemyKills; n++) deaths[integer(state, 0, 4)]++;
     const minutes = durationSeconds / 60;
-    return roster.map((p, i) => {
+    const rows = roster.map((p, index) => {
       const carry = p.role === 'MID' || p.role === 'ADC';
-      const assists = Math.min(kills - allocations[i], Math.round((kills - allocations[i]) * (p.role === 'SUP' ? 0.86 : 0.42 + rng(state) * 0.24)));
-      const csPerMinute = p.role === 'SUP' ? 1.1 : p.role === 'JGL' ? 6.0 : carry ? 8.9 : 7.7;
-      const cs = Math.round(minutes * csPerMinute * (0.86 + rng(state) * 0.24));
-      const gold = Math.round(4000 + cs * 20 + allocations[i] * 300 + assists * 110 + (won ? 1000 : 0));
-      return { playerId: p.id, name: p.name, role: p.role, teamId, kills: allocations[i], deaths: deaths[i], assists, cs, gold, damage: Math.round(minutes * (p.role === 'SUP' ? 310 : carry ? 800 : 610) * (0.7 + rng(state) * 0.6)) };
+      const assists = Math.min(kills - allocations[index], Math.round((kills - allocations[index]) * (p.role === 'SUP' ? 0.86 : 0.42 + rng(state) * 0.24)));
+      const csRate = p.role === 'SUP' ? 1.1 : p.role === 'JGL' ? 6 : carry ? 8.9 : 7.7;
+      const cs = Math.round(minutes * csRate * (0.86 + rng(state) * 0.24));
+      return { playerId: p.id, name: p.name, role: p.role, teamId, kills: allocations[index], deaths: deaths[index], assists, cs,
+        gold: 500 + cs * 20 + allocations[index] * 300 + assists * 100,
+        damage: Math.round(minutes * (p.role === 'SUP' ? 310 : carry ? 800 : 610) * (0.7 + rng(state) * 0.6)) };
     });
+    // Allocate the gold actually earned in the simulation; winning adds no invented bonus.
+    const weight = sum(rows.map(p => p.gold));
+    rows.forEach(p => { p.gold = Math.floor(totalGold * p.gold / weight); });
+    rows[0].gold += totalGold - sum(rows.map(p => p.gold));
+    return rows;
   }
   function simulateGame(state, homeId, awayId, number) {
-    const homePower = teamPower(state, homeId, awayId), awayPower = teamPower(state, awayId, homeId);
+    const ids = [homeId, awayId], other = id => id === homeId ? awayId : homeId;
+    const rosters = Object.fromEntries(ids.map(id => [id, matchRoster(state, id)]));
+    const power = Object.fromEntries(ids.map(id => [id, teamPower(state, id, other(id))]));
     const mistakes = [];
-    [homeId, awayId].forEach(teamId => ['laning', 'fight'].forEach(stage => {
+    ids.forEach(teamId => ['laning', 'fight'].forEach(stage => {
       if (rng(state) < mistakeChance(state, teamId)) mistakes.push({ teamId, stage });
     }));
-    const penalty = (id, stage) => mistakes.some(m => m.teamId === id && m.stage === stage) ? stage === 'laning' ? 7 : 11 : 0;
+    const hasMistake = (id, stage) => mistakes.some(m => m.teamId === id && m.stage === stage);
     const lanes = ROLES.map(role => {
-      const home = matchRoster(state,homeId).find(p => p.role === role), away = matchRoster(state,awayId).find(p => p.role === role);
-      const chance = chanceForDifference(effectiveSkill(state,home,'laning') + readiness(home) - penalty(homeId, 'laning'), effectiveSkill(state,away,'laning') + readiness(away) - penalty(awayId, 'laning'), 8);
+      const home = rosters[homeId].find(p => p.role === role), away = rosters[awayId].find(p => p.role === role);
+      const chance = chanceForDifference(effectiveSkill(state, home, 'laning') + readiness(home) - (hasMistake(homeId, 'laning') ? 7 : 0),
+        effectiveSkill(state, away, 'laning') + readiness(away) - (hasMistake(awayId, 'laning') ? 7 : 0), 8);
       return { role, homePlayerId: home.id, awayPlayerId: away.id, winnerId: rng(state) < chance ? homeId : awayId, homeChance: rounded(chance * 100) };
     });
-    const combatPower = id => average(matchRoster(state,id).map(p => effectiveSkill(state,p,'combat') + readiness(p))) - penalty(id, 'fight') + (id === state.teamId ? state.preparation.bonus : 0);
-    const fightChance = chanceForDifference(combatPower(homeId), combatPower(awayId), 7);
-    const teamfight = { winnerId: rng(state) < fightChance ? homeId : awayId, homeChance: rounded(fightChance * 100) };
-    const laneShare = lanes.filter(l => l.winnerId === homeId).length / lanes.length;
-    const homeChance = clamp(chanceForDifference(homePower, awayPower, 6.5) * 0.15 + laneShare * 0.25 + (teamfight.winnerId === homeId ? 1 : 0) * 0.6, 0.05, 0.95);
-    const winnerId = rng(state) < homeChance ? homeId : awayId;
-    const loserId = winnerId === homeId ? awayId : homeId;
-    const winnerKills = integer(state, 16, 28), loserKills = integer(state, 5, Math.max(6, winnerKills - 3));
-    const durationSeconds = integer(state, 26 * 60, 39 * 60);
-    const kills = { [winnerId]: winnerKills, [loserId]: loserKills };
-    const players = matchStats(state, homeId, kills[homeId], kills[awayId], durationSeconds, winnerId === homeId)
-      .concat(matchStats(state, awayId, kills[awayId], kills[homeId], durationSeconds, winnerId === awayId));
-    const gold = { [homeId]: sum(players.filter(p => p.teamId === homeId).map(p => p.gold)), [awayId]: sum(players.filter(p => p.teamId === awayId).map(p => p.gold)) };
-    const earlyId = lanes.find(l => l.role === 'JGL').winnerId;
-    const bottom = lanes.filter(l => ['ADC', 'SUP'].includes(l.role));
-    const dragonId = bottom[0].winnerId === bottom[1].winnerId ? bottom[0].winnerId : lanes.find(l => l.role === 'MID').winnerId;
-    const sideId = lanes.find(l => l.role === 'TOP').winnerId;
-    const fightId = teamfight.winnerId;
-    const events = [
-      { minute: 252 / 60, time: '04:12', teamId: earlyId, type: 'kill', title: '퍼스트 블러드', description: team(earlyId).code + '의 정글 동선이 적중하며 선취점을 가져갑니다.' },
-      { minute: 580 / 60, time: '09:40', teamId: dragonId, type: 'dragon', title: '첫 드래곤', description: team(dragonId).code + '가 라인 주도권을 활용해 첫 드래곤을 확보합니다.' },
-      { minute: 906 / 60, time: '15:06', teamId: sideId, type: 'tower', title: '포탑 공략', description: team(sideId).code + '가 사이드 라인 압박으로 포탑과 시야를 확보합니다.' },
-      { minute: 1338 / 60, time: '22:18', teamId: fightId, type: 'fight', title: '주도권을 바꾼 한타', description: team(fightId).code + '가 미드 교전에서 교전력을 발휘해 주도권을 잡습니다.' },
-      { minute: 1531 / 60, time: '25:31', teamId: fightId, type: 'baron', title: '바론 확보', description: team(fightId).code + '가 한타 승리를 이어가 시야를 장악하고 바론 버프를 획득합니다.' },
-      { minute: durationSeconds / 60, time: formatTime(durationSeconds), teamId: winnerId, type: 'nexus', title: '넥서스 파괴', description: team(winnerId).code + '가 ' + winnerKills + ':' + loserKills + ' 킬 스코어로 세트를 마무리합니다.' }
+    const skill = (id, attribute) => average(rosters[id].map(p => effectiveSkill(state, p, attribute) + readiness(p)));
+    const combat = Object.fromEntries(ids.map(id => [id, skill(id, 'combat') + (id === state.teamId ? state.preparation.bonus : 0)]));
+    const jungle = Object.fromEntries(ids.map(id => { const p = rosters[id].find(p => p.role === 'JGL'); return [id, effectiveSkill(state, p, 'combat') + readiness(p)]; }));
+    const laneShare = lanes.filter(l => l.winnerId === homeId).length / 5;
+    const laneIncome = clamp((skill(homeId, 'laning') - skill(awayId, 'laning')) * 0.035 + (laneShare - 0.5) * 2.2, -1.5, 1.5);
+    const gold = { [homeId]: 2500, [awayId]: 2500 }, kills = { [homeId]: 0, [awayId]: 0 };
+    const towers = { [homeId]: 0, [awayId]: 0 }, dragons = { [homeId]: 0, [awayId]: 0 }, baronUntil = { [homeId]: 0, [awayId]: 0 };
+    const events = [], timeline = [];
+    let second = 0, winnerId = null, teamfight = null;
+    const snapshot = () => {
+      const row = { second, gold: { ...gold }, kills: { ...kills } };
+      if (timeline.at(-1)?.second === second) timeline[timeline.length - 1] = row;
+      else timeline.push(row);
+    };
+    const advance = target => {
+      target = Math.max(second, target);
+      ids.forEach(id => {
+        const sign = id === homeId ? 1 : -1;
+        const rate = 25.5 + laneIncome * sign + towers[id] * 0.25;
+        const buffSeconds = Math.max(0, Math.min(target, baronUntil[id]) - second);
+        gold[id] += Math.round((target - second) * rate + buffSeconds * 1.2);
+      });
+      second = target;
+    };
+    const prepare = target => { advance(target - 1); snapshot(); advance(target); };
+    const gap = id => gold[id] - gold[other(id)];
+    const emit = (type, id, title, description, extra = {}, beforeGap = gap(id)) => {
+      const comeback = beforeGap < -100 && gap(id) > 100;
+      if (comeback) { title = '골드 역전 · ' + title; description += ' 획득 골드로 격차를 뒤집고 골드 우세를 가져갑니다.'; }
+      events.push({ minute: second / 60, time: formatTime(second), teamId: id, type, title, description, ...extra, ...(comeback ? { comeback: true } : {}) });
+      snapshot();
+    };
+    const tacticBonus = id => {
+      const late = clamp((second - 900) / 900, 0, 1), tactic = tacticFor(state, id);
+      return tactic === 'scaling' ? -1.5 + late * 5 : tactic === 'aggressive' ? 2.5 - late * 2 : 0.5;
+    };
+    const fightChance = (defenderId = null, objective = false) => {
+      const strength = id => combat[id] * (objective ? 0.55 : 1) + (objective ? jungle[id] * 0.45 : 0)
+        + tacticBonus(id) + (baronUntil[id] > second ? 3.5 : 0) + Math.min(3, dragons[id]) * 0.7
+        + (id === defenderId ? 3 : 0) - (hasMistake(id, 'fight') && second >= 1246 && second <= 1400 ? 11 : 0);
+      // Gold matters, but its bounded contribution cannot make a later fight certain.
+      const advantage = Math.tanh((gold[homeId] - gold[awayId]) / 7000) * 16;
+      return chanceForDifference(strength(homeId) - strength(awayId) + (power[homeId] - power[awayId]) * 0.15 + advantage, 0, 11);
+    };
+    const takeTower = (target, id) => {
+      if (towers[id] >= 10) return;
+      prepare(target); const before = gap(id); towers[id]++; gold[id] += 1100;
+      emit('tower', id, '포탑 공략', team(id).code + '가 포탑을 철거하고 운영 공간을 넓힙니다.', {}, before);
+    };
+    const fight = (target, title, small = false, forceFinish = false) => {
+      prepare(target);
+      const leader = gold[homeId] >= gold[awayId] ? homeId : awayId;
+      const defenderId = !small && Math.abs(gap(homeId)) >= 1500 ? other(leader) : null;
+      const chance = fightChance(defenderId), id = rng(state) < chance ? homeId : awayId, rival = other(id), before = gap(id);
+      const wonKills = small ? integer(state, 1, 3) : integer(state, 3, 5);
+      const lostKills = integer(state, 0, Math.min(small ? 1 : 3, wonKills - 1));
+      const bounty = before <= -1500 ? Math.min(2000, Math.round(-before * 0.2) + integer(state, 150, 350)) : 0;
+      kills[id] += wonKills; kills[rival] += lostKills;
+      gold[id] += wonKills * 300 + bounty; gold[rival] += lostKills * 300;
+      const defense = id === defenderId;
+      const description = team(id).code + '가 ' + (defense ? '상대의 진입을 받아치며 ' : '') + '교전에서 ' + wonKills + ':' + lostKills + ' 교환에 성공합니다.'
+        + (bounty ? ' 제압 골드 ' + bounty + '를 추가로 확보하며 격차를 줄입니다.' : '');
+      emit('fight', id, defense ? '수비 한타 승리' : title, description,
+        { homeChance: rounded(chance * 100), killDelta: { [id]: wonKills, [rival]: lostKills }, ...(bounty ? { shutdown: true, bountyGold: bounty } : {}), ...(defense ? { defense: true } : {}) }, before);
+      teamfight = { winnerId: id, homeChance: rounded(chance * 100) };
+      const canPush = towers[id] >= 2 || baronUntil[id] > second || second >= 32 * 60;
+      const finishChance = clamp(0.14 + Math.max(0, second / 60 - 26) * 0.03 + (wonKills - lostKills) * 0.055
+        + (baronUntil[id] > second ? 0.15 : 0) + Math.max(0, gap(id)) / 50000, 0.1, 0.85);
+      if (forceFinish || !small && second >= 26 * 60 && canPush && rng(state) < finishChance) {
+        winnerId = id;
+        prepare(second + 35);
+        emit('nexus', id, '넥서스 파괴', team(id).code + '가 마지막 한타의 생존 인원으로 넥서스를 파괴합니다. 최종 킬 스코어 ' + kills[id] + ':' + kills[rival] + '.');
+      } else if (!small && wonKills - lostKills >= 2 && rng(state) < 0.7) takeTower(second + 38, id);
+    };
+    snapshot();
+    // Outcomes are resolved in chronological order. No winner or final gold is selected in advance.
+    const scenes = [
+      [252, 'first'], [440, 'skirmish'], [580, 'dragon'], [635, 'laning-mistake'], [768, 'skirmish'], [906, 'tower'],
+      [1045, 'dragon'], [1152, 'fight'], [1246, 'fight-mistake'], [1338, 'fight'], [1531, 'baron'], [1630, 'fight'],
+      [1760, 'dragon'], [1875, 'fight'], [2015, 'baron'], [2100, 'fight'], [2280, 'fight'], [2420, 'baron'], [2495, 'fight'], [2640, 'final']
     ];
-    mistakes.forEach(m => {
-      const laning = m.stage === 'laning';
-      events.push({ minute: (laning ? 635 : 1246) / 60, time: laning ? '10:35' : '20:46', teamId: m.teamId, type: 'mistake', title: '연계 실수', description: team(m.teamId).code + (laning ? '의 라인 지원과 시야 연계가 엇갈려 상대에게 압박할 틈을 줍니다.' : '의 진입 타이밍과 후속 지원이 맞지 않아 교전에서 불리해집니다.') });
-    });
-    events.sort((a, b) => a.minute - b.minute);
+    for (const [target, kind] of scenes) {
+      if (winnerId) break;
+      if (kind === 'skirmish' || kind === 'fight' || kind === 'final') {
+        fight(target, kind === 'skirmish' ? '강가 교전' : '승부처 한타', kind === 'skirmish', kind === 'final'); continue;
+      }
+      if (kind.endsWith('-mistake')) {
+        const stage = kind === 'laning-mistake' ? 'laning' : 'fight';
+        for (const m of mistakes.filter(m => m.stage === stage)) {
+          prepare(target); gold[other(m.teamId)] += stage === 'laning' ? 350 : 500;
+          emit('mistake', m.teamId, '연계 실수', team(m.teamId).code + '의 합류와 후속 지원이 어긋나 ' + team(other(m.teamId)).code + '가 시야와 성장 공간을 확보합니다.');
+        }
+        continue;
+      }
+      if (kind === 'tower') { takeTower(target, lanes.find(l => l.role === 'TOP').winnerId); continue; }
+      prepare(target);
+      if (kind === 'first') {
+        const id = lanes.find(l => l.role === 'JGL').winnerId, before = gap(id);
+        kills[id]++; gold[id] += 400;
+        emit('kill', id, '퍼스트 블러드', team(id).code + '의 정글 동선이 적중하며 선취점을 가져갑니다.', { killDelta: { [id]: 1, [other(id)]: 0 } }, before);
+      } else {
+        const chance = fightChance(null, true), id = rng(state) < chance ? homeId : awayId, before = gap(id);
+        if (kind === 'dragon') {
+          dragons[id]++; gold[id] += 350;
+          emit('dragon', id, '드래곤 확보', team(id).code + '가 시야와 합류 우위를 활용해 드래곤을 확보합니다.', {}, before);
+        } else {
+          const steal = before <= -1500;
+          gold[id] += 1500; baronUntil[id] = second + 180;
+          emit('baron', id, steal ? '바론 스틸' : '바론 확보', team(id).code + (steal ? '가 상대의 바론 시도를 뚫고 스틸에 성공합니다. 획득 골드와 버프로 반격 기회를 만듭니다.' : '가 바론을 확보하며 추가 골드와 3분간의 압박 기회를 얻습니다.'), steal ? { steal: true } : {}, before);
+        }
+      }
+    }
+    const durationSeconds = second;
+    const players = ids.flatMap(id => matchStats(state, id, kills[id], kills[other(id)], durationSeconds, gold[id]));
     players.forEach(p => {
       const stats = state.playerStats[p.playerId] || (state.playerStats[p.playerId] = { games: 0, kills: 0, deaths: 0, assists: 0, cs: 0, gold: 0, damage: 0 });
       stats.games++;
       ['kills', 'deaths', 'assists', 'cs', 'gold', 'damage'].forEach(k => { stats[k] += p[k]; });
     });
-    return { number, winnerId, durationSeconds, duration: formatTime(durationSeconds), kills, gold, players, events, lanes, teamfight, mistakes, homeChance: rounded(homeChance * 100) };
+    return { number, winnerId, durationSeconds, duration: formatTime(durationSeconds), kills, gold, players, events, lanes, teamfight, mistakes, timeline };
   }
+  /* EVENT-DRIVEN MATCH SIMULATION END */
   function formatTime(seconds) { return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); }
   function simulateMatch(state, pair, bestOf, phase) {
     const need = Math.ceil(bestOf / 2), score = { [pair.homeId]: 0, [pair.awayId]: 0 }, games = [];
@@ -29520,9 +29626,9 @@ window.LCK_ACADEMY_DATA = {
     sung: {
       intro: ['{home} 대 {away}! 라인으로 향하며 {set}세트 시작합니다.', '{set}세트 문이 열립니다! {home}, {away}, 출발합니다.', '{home}, {away}! 첫 장면부터 흐름을 함께 따라갑니다.', '라인으로 움직이는 두 팀! {set}세트, 이제 시작입니다.'],
       kill: ['동선이 적중했습니다! {team}, 첫 킬을 먼저 가져갑니다.', '{jungle}, 동선이 통했습니다! {team} 첫 킬입니다.', '먼저 열고 먼저 가져갑니다! {team}, 선취점 확보합니다.', '첫 킬의 문이 열립니다! {team}, 출발이 좋습니다.'],
-      dragon: ['바텀 주도권이 드래곤으로! {team}, 첫 드래곤 확보합니다.', '{team}, 아래쪽 흐름을 잡고 드래곤까지 챙깁니다.', '라인에서 쌓은 힘이 보상으로! {team}, 드래곤 가져갑니다.', '첫 드래곤은 {team}! 바텀 주도권을 잘 활용했습니다.'],
+      dragon: ['합류 우위가 드래곤으로! {team}, 드래곤 확보합니다.', '{team}, 아래쪽 흐름을 잡고 드래곤까지 챙깁니다.', '시야에서 만든 힘이 보상으로! {team}, 드래곤 가져갑니다.', '드래곤은 {team}! 합류 기회를 잘 활용했습니다.'],
       tower: ['사이드 압박이 적중합니다! {team}, 포탑을 밀어냅니다.', '맵을 넓히는 한 걸음! {team}, 포탑 공략입니다.', '{team}, 사이드를 열고 포탑까지 확실하게 챙깁니다.', '포탑이 무너집니다! {team}, 시야까지 함께 확보합니다.'],
-      fight: ['미드에서 맞붙었습니다! {team}, 한타의 흐름을 잡습니다.', '한타 집중력이 빛납니다! {team}, 미드 주도권 확보합니다.', '교전의 무게가 기웁니다! {team}, 미드에서 앞서갑니다.', '미드 한타, {team}! 집중력을 발휘하며 주도권을 잡습니다.'],
+      fight: ['맞붙었습니다! {team}, 교전의 흐름을 잡습니다.', '교전 집중력이 빛납니다! {team}, 주도권 확보합니다.', '교전의 무게가 기웁니다! {team}, 맞대결에서 앞서갑니다.', '교전에서 이기는 {team}! 집중력을 발휘하며 주도권을 잡습니다.'],
       mistake: ['{team}, 발이 맞지 않았습니다! {opponent}, 빈틈을 가져갑니다.', '{team}의 합류가 엇갈립니다! {opponent}에게 기회가 열립니다.', '호흡이 끊긴 {team}! {opponent}가 주도권을 챙깁니다.', '{team}, 연계 실수입니다! 그 틈을 파고드는 {opponent}!'],
       baron: ['시야를 잡고 바론까지! {team}, 버프를 확보합니다.', '바론을 챙기는 {team}! 다음 압박의 힘이 생겼습니다.', '{team}, 바론 확보! 시야 장악이 보상으로 돌아옵니다.', '바론 버프가 들어옵니다! {team}, 압박을 준비합니다.'],
       nexus: ['넥서스가 무너집니다! {team}, {set}세트를 가져갑니다.', '마지막 한 걸음까지! {team}, 넥서스 파괴입니다.', '{team}, 넥서스 파괴! 이번 세트를 마무리합니다.', '끝까지 밀어붙였습니다! {team}, {set}세트 승리입니다.']
@@ -29530,9 +29636,9 @@ window.LCK_ACADEMY_DATA = {
     cloudtemplar: {
       intro: ['{home} 대 {away}, 첫 동선과 라인 주도권을 보겠습니다.', '{set}세트 시작입니다. 정글 동선이 첫 기회를 만듭니다.', '두 팀 모두 출발합니다. 초반 주도권이 중요하겠네요.', '첫 교전 전까지, 라인과 정글의 연결을 보겠습니다.'],
       kill: ['정글 동선이 핵심이었죠. {team}, 선취점으로 보상받습니다.', '{team}, 준비한 동선이 맞았습니다. 첫 킬을 확보합니다.', '첫 킬만큼 동선이 중요하죠. {team}, 시작이 좋습니다.', '{jungle}의 동선이 적중했습니다. {team}, 첫 킬 확보합니다.'],
-      dragon: ['바텀 주도권을 활용했죠. {team}, 첫 드래곤 확보합니다.', '라인의 힘을 활용했습니다. {team}, 드래곤을 챙깁니다.', '{team}, 바텀 주도권이 있었습니다. 드래곤으로 이어졌네요.', '드래곤은 바텀 주도권의 보상이죠. {team}, 잘 챙겼습니다.'],
+      dragon: ['합류 기회를 활용했죠. {team}, 드래곤 확보합니다.', '시야의 힘을 활용했습니다. {team}, 드래곤을 챙깁니다.', '{team}, 합류 우위가 있었습니다. 드래곤으로 이어졌네요.', '드래곤 앞 판단이 좋았죠. {team}, 잘 챙겼습니다.'],
       tower: ['사이드 압박이 통했습니다. {team}, 포탑과 시야를 확보합니다.', '포탑을 밀면 공간이 열리죠. {team}, 시야까지 챙겼습니다.', '{team}, 사이드 압박의 보상입니다. 포탑을 확보했네요.', '포탑과 시야를 함께 챙겼죠. {team}, 공간을 넓힙니다.'],
-      fight: ['미드 교전 집중력이 좋았습니다. {team}, 주도권을 잡습니다.', '{team}, 미드 한타를 잘 풀었습니다. 흐름을 잡았네요.', '이 한타가 중요했습니다. {team}, 미드 주도권 확보합니다.', '미드에서 힘이 모였습니다. {team}, 한타 집중력이 좋았죠.'],
+      fight: ['교전 집중력이 좋았습니다. {team}, 주도권을 잡습니다.', '{team}, 교전을 잘 풀었습니다. 흐름을 잡았네요.', '이 교전이 중요했습니다. {team}, 주도권 확보합니다.', '선수들의 힘이 모였습니다. {team}, 교전 집중력이 좋았죠.'],
       mistake: ['{team} 비상!!!!!!!! 합류 시점이 맞지 않았죠. {opponent}가 빈틈을 얻습니다.', '{team} 비상!!!!!!!! 연계가 끊겼습니다. {opponent}에게 유리한 흐름입니다.', '{team} 비상!!!!!!!! 함께 움직이지 못했네요. {opponent}가 주도권을 가져갑니다.', '{team} 비상!!!!!!!! 호흡이 어긋났습니다. {opponent}가 그 틈을 활용합니다.'],
       baron: ['시야 장악이 먼저였죠. {team}, 바론 버프로 이어집니다.', '바론 앞 시야를 잡았습니다. {team}, 버프 확보합니다.', '{team}, 바론 확보! 상대는 비상! 다음 압박을 대비해야죠.', '바론을 확보한 {team}, 버프로 다음 압박을 준비하겠죠.'],
       nexus: ['넥서스까지 마무리했습니다. {team}, 이번 세트를 가져갑니다.', '{team}, 마지막 공략까지 완성했습니다. {set}세트 승리입니다.', '넥서스가 파괴됐습니다. {team}, 이번 세트의 승자입니다.', '세트 마무리까지 이어졌네요. {team}, 넥서스 파괴입니다.']
@@ -29540,18 +29646,40 @@ window.LCK_ACADEMY_DATA = {
     jeon: {
       intro: ['{home}! {away}! 경기를 시작하겠습니다!', '두 팀이 나섭니다! {set}세트의 승부가 시작됩니다!', '{home}, 그리고 {away}! {set}세트 함께 보시죠!', '라인으로 향합니다! {set}세트, 두 팀의 승부 시작입니다!'],
       kill: ['첫 킬이 터집니다! 먼저 앞서는 팀, {team}!', '정글 동선이 적중합니다! 선취점의 주인공, {team}!', '{team}! 첫 킬을 가져갑니다! 시작부터 힘을 냅니다!', '선취점을 잡습니다! 첫 교전의 보상은 {team}!'],
-      dragon: ['첫 드래곤입니다! 바텀의 힘을 보여주는 {team}!', '{team}! 첫 드래곤 확보! 주도권을 보상으로 바꿉니다!', '드래곤을 가져갑니다! 아래쪽 흐름을 잡은 {team}!', '바텀에서 쌓은 힘! 첫 드래곤의 주인은 {team}!'],
+      dragon: ['드래곤입니다! 합류의 힘을 보여주는 {team}!', '{team}! 드래곤 확보! 기회를 보상으로 바꿉니다!', '드래곤을 가져갑니다! 아래쪽 흐름을 잡은 {team}!', '시야에서 만든 기회! 드래곤의 주인은 {team}!'],
       tower: ['포탑이 무너집니다! 사이드를 밀어붙이는 팀, {team}!', '{team}! 포탑 공략 성공! 시야까지 함께 확보합니다!', '사이드에서 길을 엽니다! 포탑을 가져가는 {team}!', '포탑을 밀어냅니다! 압박이 통했습니다! {team}!'],
-      fight: ['미드에서 맞붙습니다! 한타의 주도권을 잡는 {team}!', '{team}! 미드 한타에서 힘을 보여줍니다! 집중력이 빛납니다!', '한타의 흐름이 기웁니다! 주도권을 움켜쥐는 {team}!', '미드 한타입니다! 집중력으로 교전의 흐름을 잡는 {team}!'],
+      fight: ['맞붙습니다! 교전의 주도권을 잡는 {team}!', '{team}! 교전에서 힘을 보여줍니다! 집중력이 빛납니다!', '교전의 흐름이 기웁니다! 주도권을 움켜쥐는 {team}!', '집중력으로 교전의 흐름을 잡는 {team}!'],
       mistake: ['{team}! 연계가 어긋납니다! 기회를 잡는 {opponent}!', '합류가 늦습니다! {team}의 빈틈! {opponent}가 앞서갑니다!', '{team}, 호흡이 끊깁니다! 그 틈을 잡은 {opponent}!', '{team}의 연계 실수! 주도권을 가져오는 {opponent}!'],
       baron: ['바론입니다! 시야를 잡고 버프를 확보하는 {team}!', '{team}! 바론 확보! 압박을 준비할 힘이 생깁니다!', '바론 버프가 들어갑니다! 시야 장악에 성공한 {team}!', '시야를 장악합니다! 바론을 가져갑니다! {team}!'],
       nexus: ['넥서스가 무너집니다! {set}세트의 승자! {team}!', '{team}! 넥서스 파괴! {set}세트를 가져갑니다!', '마지막 공략까지 성공합니다! {set}세트 승리, {team}!', '넥서스 파괴입니다! 이번 세트를 마무리하는 {team}!']
     }
   };
+  const swingTemplates = {
+    sung: {
+      comeback: ['골드가 뒤집힙니다! {team}, 반격을 성과로 바꿉니다!', '격차를 지워냅니다! {team}, 이제 골드도 앞서갑니다!', '{team}, 추격 끝에 골드 역전! 경기가 다시 뜨거워집니다.'],
+      shutdown: ['제압 골드가 들어옵니다! {team}, 추격할 힘을 얻습니다!', '{team}, 교전을 이기고 제압 골드까지! 격차를 줄입니다.', '기회를 놓치지 않습니다! {team}, 제압 골드로 따라붙습니다.'],
+      steal: ['바론을 뺏었습니다! {team}, 반격의 발판을 만듭니다!', '{team}, 바론 스틸! 상대의 계획을 끊어냅니다!', '바론의 주인이 바뀝니다! {team}, 스틸에 성공합니다!'],
+      defense: ['받아치는 교전이 통합니다! {team}, 수비 한타 승리입니다!', '{team}, 밀려오던 상대를 돌려세웁니다! 반격 기회입니다.', '진입을 받아냈습니다! {team}, 수비에서 힘을 보여줍니다.']
+    },
+    cloudtemplar: {
+      comeback: ['제압과 운영의 보상을 모았습니다. {team}, 골드 우세까지 가져옵니다.', '{team}, 반격이 골드 역전으로 이어졌습니다. 다음 운영이 중요하죠.', '격차를 모두 지웠습니다. {team}, 이제 골드도 앞서는 상황입니다.'],
+      shutdown: ['{team}, 제압 골드가 중요합니다. 이번 교전으로 추격 여력이 생겼죠.', '골드가 뒤져도 교전은 이길 수 있습니다. {team}, 제압 보상을 챙깁니다.', '{team}, 상대의 빈틈을 잘 잡았습니다. 제압 골드로 격차를 줄이네요.'],
+      steal: ['{team}, 바론 스틸입니다. 버프를 활용할 3분이 중요하죠.', '상대의 바론 계획을 끊었습니다. {team}, 반격할 기회를 얻었네요.', '{team}, 스틸로 바론 골드와 버프를 가져갑니다. 다음 운영을 봐야죠.'],
+      defense: ['{team}, 상대 진입을 받아치는 판단이 좋았습니다. 수비 한타를 이겼죠.', '앞선 팀도 진입을 잘못하면 위험합니다. {team}, 수비에서 기회를 잡네요.', '{team}, 뭉쳐서 받아쳤습니다. 불리한 골드를 교전 집중력으로 이겨냈죠.']
+    },
+    jeon: {
+      comeback: ['뒤집었습니다! 골드까지 앞서는 {team}! 이제 흐름이 바뀝니다!', '{team}! 추격 끝에 골드 역전! 아직 승부는 끝나지 않았습니다!', '골드 우세를 가져옵니다! 포기하지 않은 {team}!'],
+      shutdown: ['{team}! 제압 골드 확보! 추격할 힘을 얻습니다!', '한타를 이깁니다! 제압 보상까지 가져가는 {team}!', '격차를 줄여갑니다! 제압 골드를 챙기는 {team}!'],
+      steal: ['뺏었습니다! 바론 스틸에 성공하는 {team}!', '{team}! 바론을 가져옵니다! 반격의 기회를 잡았습니다!', '바론의 주인공은 {team}! 스틸이 터졌습니다!'],
+      defense: ['막아냈습니다! 수비 한타를 이겨내는 {team}!', '{team}! 상대의 진입을 받아칩니다! 이제 반격입니다!', '밀려도 무너지지 않습니다! 수비에서 힘을 보여주는 {team}!']
+    }
+  };
+  for (const id of Object.keys(swingTemplates)) Object.assign(templates[id], swingTemplates[id]);
   const mix = {
     intro: ['sung', 'jeon', 'cloudtemplar'], kill: ['sung', 'jeon', 'cloudtemplar'],
     dragon: ['cloudtemplar', 'sung', 'cloudtemplar'], tower: ['sung', 'cloudtemplar', 'jeon'],
-    fight: ['jeon', 'sung', 'cloudtemplar'], mistake: ['cloudtemplar', 'cloudtemplar', 'cloudtemplar'], baron: ['cloudtemplar', 'jeon', 'sung'], nexus: ['jeon', 'sung', 'jeon']
+    fight: ['jeon', 'sung', 'cloudtemplar'], mistake: ['cloudtemplar', 'cloudtemplar', 'cloudtemplar'], baron: ['cloudtemplar', 'jeon', 'sung'], nexus: ['jeon', 'sung', 'jeon'],
+    comeback: ['jeon', 'sung', 'cloudtemplar'], shutdown: ['cloudtemplar', 'sung', 'jeon'], steal: ['jeon', 'sung', 'cloudtemplar'], defense: ['cloudtemplar', 'jeon', 'sung']
   };
   const lookup = (teams, id) => (Array.isArray(teams) ? teams : Object.values(teams || {})).find(t => t.id === id) || { id, code: '해당 팀', shortName: '해당 팀' };
   const eventSeconds = event => {
@@ -29570,7 +29698,8 @@ window.LCK_ACADEMY_DATA = {
     let event = input.event || null;
     if (event && frame && Number.isFinite(frame.seconds) && eventSeconds(event) > frame.seconds) event = null;
     const owns = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-    const type = event && owns(templates.sung, event.type) ? event.type : 'intro';
+    const baseType = event && owns(templates.sung, event.type) ? event.type : 'intro';
+    const type = event?.comeback ? 'comeback' : baseType === 'baron' && event.steal ? 'steal' : baseType === 'fight' && event.shutdown ? 'shutdown' : baseType === 'fight' && event.defense ? 'defense' : baseType;
     const eventIndex = event ? Number.isInteger(input.eventIndex) ? input.eventIndex : (game.events || []).indexOf(event) : -1;
     const selection = Math.abs(eventIndex + gameIndex + 1) % 3;
     const speakerId = owns(templates, mode) ? mode : mix[type][selection];
@@ -29584,7 +29713,7 @@ window.LCK_ACADEMY_DATA = {
     const jungle = (game.players || []).find(p => p.teamId === event?.teamId && p.role === 'JGL');
     const display = { team: winningTeam.code || winningTeam.shortName || '해당 팀', opponent: opponent.code || opponent.shortName, home: home.code || home.shortName, away: away.code || away.shortName, jungle: jungle?.name || '정글러', set: Math.max(1, Number(game.number) || gameIndex + 1) };
     const fill = (values, template = variant) => template.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? ''));
-    const energy = ({ intro: 0.3, kill: 0.65, dragon: 0.4, tower: 0.5, fight: 0.9, mistake: 0.65, baron: 0.8, nexus: 1 })[type];
+    const energy = ({ intro: 0.3, kill: 0.65, dragon: 0.4, tower: 0.5, fight: 0.9, mistake: 0.65, baron: 0.8, nexus: 1, comeback: 1, shutdown: 0.85, steal: 1, defense: 0.85 })[type];
     return { speakerId, speakerName: speakerNames[speakerId], text: fill(display), energy, eventKey, eventTime: event?.time || '00:00' };
   }
 
@@ -29627,7 +29756,19 @@ window.LCK_ACADEMY_DATA = {
     const opening=entries.find(e=>e.event.type==='kill');
     const first=opening?.seconds??Math.min(252,duration*.14);
     const kills={},gold={};
+    const timeline=game.timeline;
+    const recorded=Array.isArray(timeline)&&timeline.length>=2&&timeline[0].second===0&&timeline.at(-1).second===duration
+      &&[homeId,awayId].every(id=>timeline.at(-1).gold?.[id]===game.gold?.[id]&&timeline.at(-1).kills?.[id]===game.kills?.[id]);
+    const sample=recorded?timeline.findLastIndex(row=>row.second<=seconds):-1;
     for(const id of [homeId,awayId]){
+      if(recorded){
+        const before=timeline[Math.max(0,sample)],after=timeline[Math.min(timeline.length-1,sample+1)];
+        const ratio=after.second===before.second?0:clamp((seconds-before.second)/(after.second-before.second));
+        kills[id]=before.kills[id];
+        gold[id]=Math.round(before.gold[id]+(after.gold[id]-before.gold[id])*ratio);
+        continue;
+      }
+      // Older saves have no scene-by-scene economy; preserve their original replay.
       const finalKills=Number(game.kills?.[id])||0;
       const start=first+(opening&&opening.event.teamId!==id?105:0);
       const ending=Math.max(start+1,duration-22);
@@ -29647,7 +29788,7 @@ window.LCK_ACADEMY_DATA = {
     // Phase results become visible only when their corresponding scene has played.
     const phases={
       lanes:Array.isArray(game.lanes)&&occurred.some(e=>e.event.type==='tower')?game.lanes.map(lane=>({role:lane.role,winnerId:lane.winnerId})):null,
-      teamfight:game.teamfight&&occurred.some(e=>e.event.type==='fight')?{winnerId:game.teamfight.winnerId}:null
+      teamfight:(recorded||game.teamfight)&&occurred.some(e=>e.event.type==='fight')?{winnerId:recorded?occurred.findLast(e=>e.event.type==='fight').event.teamId:game.teamfight.winnerId}:null
     };
     const tokens=(game.players||[]).map((player,index)=>{
       const home=player.teamId===homeId,roleIndex=Math.max(0,ROLES.indexOf(player.role));
@@ -29668,7 +29809,8 @@ window.LCK_ACADEMY_DATA = {
         const angle=roleIndex*1.27+(home?2.9:.15),distance=home?31:43;
         x+=(target[0]+Math.cos(angle)*distance-x)*gather;
         y+=(target[1]+Math.sin(angle)*distance-y)*gather;
-        dead=['kill','fight'].includes(active.event.type)&&player.teamId!==active.event.teamId&&time>=0&&time<28&&roleIndex===(active.event.type==='kill'?2:3);
+        const recordedDeaths=active.event.killDelta?.[player.teamId===homeId?awayId:homeId];
+        dead=['kill','fight'].includes(active.event.type)&&time>=0&&time<28&&(Number.isInteger(recordedDeaths)?roleIndex<recordedDeaths:player.teamId!==active.event.teamId&&roleIndex===(active.event.type==='kill'?2:3));
         disoriented=active.event.type==='mistake'&&player.teamId===active.event.teamId&&time>=0&&time<28;
       }
       return {playerId:player.playerId,name:player.name,role:player.role,teamId:player.teamId,x:Math.round(x*100)/100,y:Math.round(y*100)/100,dead,disoriented,side:home?'home':'away'};
